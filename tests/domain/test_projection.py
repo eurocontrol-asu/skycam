@@ -7,34 +7,37 @@ from skycam.domain.projection import ProjectionService
 
 
 class TestProjectionService:
-    """Tests for ProjectionService."""
+    """Tests for ProjectionService.
+
+    Uses session-scoped projector to avoid rebuilding interpolators.
+    """
 
     def test_project_returns_ndarray(
         self,
-        projector: ProjectionService,
-        sample_image: NDArray[np.uint8],
+        projector_session: ProjectionService,
+        sample_image_session: NDArray[np.uint8],
     ) -> None:
         """project() returns a numpy array."""
-        result = projector.project(sample_image)
+        result = projector_session.project(sample_image_session)
         assert isinstance(result, np.ndarray)
 
     def test_project_output_dtype(
         self,
-        projector: ProjectionService,
-        sample_image: NDArray[np.uint8],
+        projector_session: ProjectionService,
+        sample_image_session: NDArray[np.uint8],
     ) -> None:
         """project() returns uint8 by default."""
-        result = projector.project(sample_image)
+        result = projector_session.project(sample_image_session)
         assert result.dtype == np.uint8
 
     def test_project_output_shape(
         self,
-        projector: ProjectionService,
-        sample_image: NDArray[np.uint8],
+        projector_session: ProjectionService,
+        sample_image_session: NDArray[np.uint8],
     ) -> None:
         """project() produces correct output dimensions."""
-        settings = projector.settings
-        result = projector.project(sample_image)
+        settings = projector_session.settings
+        result = projector_session.project(sample_image_session)
 
         assert result.shape[0] == settings.resolution
         assert result.shape[1] == settings.resolution
@@ -43,24 +46,27 @@ class TestProjectionService:
 
     def test_project_float_output(
         self,
-        projector: ProjectionService,
-        sample_image: NDArray[np.uint8],
+        projector_session: ProjectionService,
+        sample_image_session: NDArray[np.uint8],
     ) -> None:
         """project() can return float64 when requested."""
-        result = projector.project(sample_image, as_uint8=False)
+        result = projector_session.project(sample_image_session, as_uint8=False)
         assert result.dtype == np.float64
 
 
 class TestGeodesicCalculations:
-    """Tests for geodesic calculation methods."""
+    """Tests for geodesic calculation methods.
+
+    Uses session-scoped projector to avoid rebuilding interpolators.
+    """
 
     def test_azimuth_zenith_calculation(
         self,
-        projector: ProjectionService,
+        projector_session: ProjectionService,
     ) -> None:
         """calculate_azimuth_zenith returns valid angles."""
         # Test with a point north of the observer
-        azimuth, zenith = projector.calculate_azimuth_zenith(
+        azimuth, zenith = projector_session.calculate_azimuth_zenith(
             target_lat=49.0,  # North of observer
             target_lon=2.346,  # Same longitude
             target_alt=10000,  # At cloud height
@@ -77,10 +83,10 @@ class TestGeodesicCalculations:
 
     def test_latitude_longitude_calculation(
         self,
-        projector: ProjectionService,
+        projector_session: ProjectionService,
     ) -> None:
         """calculate_latitude_longitude returns valid coordinates."""
-        lat, lon = projector.calculate_latitude_longitude(
+        lat, lon = projector_session.calculate_latitude_longitude(
             azimuth=0.0,  # North
             zenith=45.0,  # 45 degrees from vertical
             target_altitude=10000,
@@ -97,7 +103,7 @@ class TestGeodesicCalculations:
 
     def test_round_trip_coordinates(
         self,
-        projector: ProjectionService,
+        projector_session: ProjectionService,
     ) -> None:
         """Azimuth/zenith → lat/lon → azimuth/zenith round trip."""
         original_az = 45.0
@@ -108,7 +114,7 @@ class TestGeodesicCalculations:
         target_alt = 10000.0
 
         # Convert to lat/lon
-        lat, lon = projector.calculate_latitude_longitude(
+        lat, lon = projector_session.calculate_latitude_longitude(
             azimuth=original_az,
             zenith=original_zen,
             target_altitude=target_alt,
@@ -118,7 +124,7 @@ class TestGeodesicCalculations:
         )
 
         # Convert back to azimuth/zenith
-        az, zen = projector.calculate_azimuth_zenith(
+        az, zen = projector_session.calculate_azimuth_zenith(
             target_lat=lat,
             target_lon=lon,
             target_alt=target_alt,
@@ -130,3 +136,4 @@ class TestGeodesicCalculations:
         # Should match original within floating point tolerance
         assert abs(az - original_az) < 0.1
         assert abs(zen - original_zen) < 0.1
+

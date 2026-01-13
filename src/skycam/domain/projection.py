@@ -38,6 +38,7 @@ class ProjectionService:
 
     calibration: CalibrationData
     settings: ProjectionSettings
+    lazy_init: bool = field(default=False, repr=False)
 
     # Private fields for cached interpolators
     _azimuth_zenith_to_pixel_raw: LinearNDInterpolator | None = field(
@@ -58,7 +59,17 @@ class ProjectionService:
 
     def __post_init__(self) -> None:
         """Initialize interpolators after dataclass construction."""
-        self._init_interpolators()
+        if not self.lazy_init:
+            self._init_interpolators()
+
+    def ensure_initialized(self) -> None:
+        """Initialize interpolators on-demand (lazy loading).
+
+        Call this method to explicitly build interpolators when using
+        lazy_init=True. This is called automatically by project().
+        """
+        if self._azimuth_zenith_to_pixel_raw is None:
+            self._init_interpolators()
 
     def _init_interpolators(self) -> None:
         """Build the interpolation grids and cached interpolators.
@@ -149,10 +160,8 @@ class ProjectionService:
         Raises:
             ProjectionError: If projection fails
         """
-        if self._azimuth_zenith_to_pixel_raw is None:
-            raise ProjectionError("Interpolators not initialized")
-        if self._azimuth_zenith_grid is None:
-            raise ProjectionError("Grid not initialized")
+        # Ensure interpolators are built (supports lazy_init=True)
+        self.ensure_initialized()
 
         try:
             # Create interpolator for raw image RGB values
@@ -166,6 +175,9 @@ class ProjectionService:
             )
 
             # Map azimuth/zenith grid to raw pixel coordinates
+            # Type narrowing: ensure_initialized guarantees these are not None
+            assert self._azimuth_zenith_to_pixel_raw is not None
+            assert self._azimuth_zenith_grid is not None
             projected_grid = self._azimuth_zenith_to_pixel_raw(
                 self._azimuth_zenith_grid
             )

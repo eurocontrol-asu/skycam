@@ -3,7 +3,8 @@
 These tests verify that the refactored projection produces outputs
 that match the legacy implementation exactly.
 
-Mark: These tests are slow (~60s) due to calibration loading and projection.
+Mark: These tests are slow (first run only) due to interpolator build.
+The projector is session-cached, so subsequent runs are fast.
 Skip in development with: pytest -m "not slow"
 """
 
@@ -47,13 +48,13 @@ def calculate_image_similarity(
 class TestGoldenOutputs:
     """Tests comparing against legacy golden outputs.
 
+    Uses session-scoped projector for performance.
     These tests are marked as slow and can be skipped with: pytest -m "not slow"
-    Run only in CI or before major releases.
     """
 
     def test_projection_produces_valid_output(
         self,
-        projector: ProjectionService,
+        projector_session: ProjectionService,
         gold_inputs_path: Path,
         image_stem: str,
     ) -> None:
@@ -61,7 +62,7 @@ class TestGoldenOutputs:
         input_path = gold_inputs_path / f"{image_stem}.jp2"
         input_image = load_jp2(input_path)
 
-        result = projector.project(input_image)
+        result = projector_session.project(input_image)
 
         assert result is not None
         assert result.shape[0] > 0
@@ -70,7 +71,7 @@ class TestGoldenOutputs:
 
     def test_projection_output_dimensions(
         self,
-        projector: ProjectionService,
+        projector_session: ProjectionService,
         gold_inputs_path: Path,
         image_stem: str,
     ) -> None:
@@ -78,15 +79,15 @@ class TestGoldenOutputs:
         input_path = gold_inputs_path / f"{image_stem}.jp2"
         input_image = load_jp2(input_path)
 
-        result = projector.project(input_image)
+        result = projector_session.project(input_image)
 
-        assert result.shape[0] == projector.settings.resolution
-        assert result.shape[1] == projector.settings.resolution
+        assert result.shape[0] == projector_session.settings.resolution
+        assert result.shape[1] == projector_session.settings.resolution
         assert result.shape[2] == 3  # RGB
 
     def test_projection_matches_golden_exactly(
         self,
-        projector: ProjectionService,
+        projector_session: ProjectionService,
         gold_inputs_path: Path,
         gold_outputs_path: Path,
         image_stem: str,
@@ -102,7 +103,7 @@ class TestGoldenOutputs:
         input_image = load_jp2(input_path)
         expected = load_jpg(expected_path)
 
-        result = projector.project(input_image)
+        result = projector_session.project(input_image)
 
         _max_diff, mean_diff, pct_matching = calculate_image_similarity(
             result, expected
@@ -112,3 +113,4 @@ class TestGoldenOutputs:
         # Small diff allowed for JPEG compression
         assert mean_diff < 1.0, f"Mean diff too high: {mean_diff}"
         assert pct_matching > 99.0, f"Too few matching pixels: {pct_matching}%"
+
