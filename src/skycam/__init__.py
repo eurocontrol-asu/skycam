@@ -1,4 +1,4 @@
-"""skycam - Camera-agnostic fisheye image projection library for ground-based sky observation"""
+"""skycam - Fisheye image projection for ground-based sky observation."""
 
 from skycam._version import __version__
 
