@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
+from scipy.interpolate import LinearNDInterpolator
 
 from skycam.domain.exceptions import ProjectionError
 from skycam.domain.models import CalibrationData, ProjectionSettings
@@ -57,6 +57,12 @@ class ProjectionService:
         repr=False,
     )
     _azimuth_zenith_grid: NDArray[np.float64] | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    # Precomputed pixel coordinates for fast Numba projection
+    _pixel_coords: NDArray[np.float64] | None = field(
         default=None,
         init=False,
         repr=False,
@@ -148,6 +154,12 @@ class ProjectionService:
             azimuth_zenith, coordinates
         )
 
+        # Precompute pixel coordinates for the output grid (Numba optimization)
+        # This moves the expensive interpolation out of project() into init
+        self._pixel_coords = self._azimuth_zenith_to_pixel_raw(
+            self._azimuth_zenith_grid
+        )
+
     def project(
         self,
         image: NDArray[np.uint8],
@@ -169,29 +181,27 @@ class ProjectionService:
         self.ensure_initialized()
 
         try:
-            # Create interpolator for raw image RGB values
-            x_r = np.arange(image.shape[0])
-            y_r = np.arange(image.shape[1])
-            pixel_to_rgb = RegularGridInterpolator(
-                (x_r, y_r),
-                image,
-                bounds_error=False,
-                fill_value=0,
-            )
+            # Use precomputed pixel coordinates with Numba bilinear interpolation
+            # This is ~10x faster than scipy.interpolate.RegularGridInterpolator
+            from skycam.domain.interpolation import bilinear_sample
 
-            # Map azimuth/zenith grid to raw pixel coordinates
-            # Type narrowing: ensure_initialized guarantees these are not None
-            assert self._azimuth_zenith_to_pixel_raw is not None
-            assert self._azimuth_zenith_grid is not None
-            projected_grid = self._azimuth_zenith_to_pixel_raw(
-                self._azimuth_zenith_grid
-            )
+            assert self._pixel_coords is not None
 
-            # Interpolate RGB values for projected grid
-            projected_image = pixel_to_rgb(projected_grid)
+            # Flatten coords for Numba, reshape result to grid
+            resolution = self.settings.resolution
+            flat_coords = self._pixel_coords.reshape(-1, 2)
+
+            # Fast Numba-compiled bilinear sampling
+            sampled = bilinear_sample(image, flat_coords)
+
+            # Reshape to output grid (resolution, resolution, channels)
+            n_channels = image.shape[2] if len(image.shape) == 3 else 1
+            projected_image = sampled.reshape(resolution, resolution, n_channels)
 
             if as_uint8:
-                result: NDArray[np.uint8] = projected_image.astype(np.uint8)
+                result: NDArray[np.uint8] = np.clip(projected_image, 0, 255).astype(
+                    np.uint8
+                )
                 return result
             result_f64: NDArray[np.float64] = projected_image.astype(np.float64)
             return result_f64
