@@ -99,7 +99,11 @@ def save_image(
     if ext in ("jpg", "jpeg"):
         params = [cv2.IMWRITE_JPEG_QUALITY, quality]
 
-    success = cv2.imwrite(str(path), bgr, params)
-    if not success:
-        msg = f"Failed to save image: {path}"
-        raise SkycamError(msg)
+    try:
+        success = cv2.imwrite(str(path), bgr, params)
+        if not success:
+            msg = f"Failed to save image: {path}"
+            raise SkycamError(msg)
+    except cv2.error as e:
+        msg = f"Failed to save image: {path} ({e})"
+        raise SkycamError(msg) from e

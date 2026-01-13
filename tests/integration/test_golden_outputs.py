@@ -113,4 +113,3 @@ class TestGoldenOutputs:
         # Small diff allowed for JPEG compression
         assert mean_diff < 1.0, f"Mean diff too high: {mean_diff}"
         assert pct_matching > 99.0, f"Too few matching pixels: {pct_matching}%"
-

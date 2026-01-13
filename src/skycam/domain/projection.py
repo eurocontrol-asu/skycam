@@ -29,6 +29,11 @@ class ProjectionService:
     1. Calibration data (azimuth/zenith maps) to define the camera geometry
     2. Projection settings (resolution, cloud height, etc.) to define output
 
+    Warning:
+        Thread Safety: This class caches internal interpolators as mutable
+        state. For concurrent use in multi-threaded contexts, instantiate
+        a separate ProjectionService per thread or protect access with a lock.
+
     Example:
         >>> calibration = loader.load("visible")
         >>> settings = ProjectionSettings()

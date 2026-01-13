@@ -136,4 +136,3 @@ class TestGeodesicCalculations:
         # Should match original within floating point tolerance
         assert abs(az - original_az) < 0.1
         assert abs(zen - original_zen) < 0.1
-
