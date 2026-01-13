@@ -32,45 +32,24 @@ hide:
 
 ---
 
-## 🗺️ Navigation
+## Documentation
 
-<div class="grid cards" markdown>
-
--   :mortar_board: **[Tutorial](tutorial.md)**
-
-    ---
-
-    Project your first image in 5 minutes. Step-by-step, no choices.
-
--   :wrench: **[How-To Guides](guides.md)**
-
-    ---
-
-    Solve specific problems: batch processing, env config, geo calculations.
-
--   :brain: **[Concepts](concepts.md)**
-
-    ---
-
-    Understand the architecture, algorithm, and design decisions.
-
--   :books: **[Reference](reference.md)**
-
-    ---
-
-    Complete API documentation: all classes, methods, and options.
-
-</div>
+| | |
+|---|---|
+| 🚀 **[Tutorial](tutorial.md)** | Project your first image in 5 minutes |
+| 🛠️ **[How-To Guides](guides.md)** | Solve specific problems: batch processing, env config |
+| 🧠 **[Concepts](concepts.md)** | Understand the architecture and algorithm |
+| 📚 **[Reference](reference.md)** | Complete API documentation |
 
 ---
 
-## ⚡ Quick Install
+## Quick Install
 
 ```bash
 uv add skycam
 ```
 
-## 🎯 Minimal Example
+## Minimal Example
 
 ```python
 from pathlib import Path
@@ -91,11 +70,10 @@ projector = ProjectionService(
 projected = projector.project(load_jp2(Path("input.jp2")))
 ```
 
-## ✨ Features
+## Features
 
 | Feature | Description |
 |---------|-------------|
-| 🐍 **Modern Python** | 3.12+ with strict MyPy typing |
 | ⚡ **Numba JIT** | ~100x speedup via compiled kernels |
 | 💾 **Coordinate Cache** | Sub-100ms init after first load |
 | ✅ **Pydantic v2** | Validated settings with env support |
@@ -103,7 +81,6 @@ projected = projector.project(load_jp2(Path("input.jp2")))
 
 ---
 
-<div style="text-align: center; margin: 2rem 0;">
-  <a href="tutorial/" class="md-button md-button--primary">🚀 Get Started</a>
-  <a href="reference/" class="md-button">📚 API Reference</a>
-</div>
+<p align="center">
+  <a href="tutorial/"><strong>Get Started →</strong></a>
+</p>
