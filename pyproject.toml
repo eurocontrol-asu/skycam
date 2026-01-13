@@ -107,7 +107,6 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--tb=short",
-    "-m", "not slow",  # Skip slow tests by default
 ]
 asyncio_mode = "auto"
 

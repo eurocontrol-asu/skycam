@@ -4,7 +4,9 @@ This module contains the core domain logic for projecting hemispherical
 camera images onto a regular grid using calibration data.
 """
 
+import hashlib
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -43,6 +45,7 @@ class ProjectionService:
 
     calibration: CalibrationData
     settings: ProjectionSettings
+    calibration_path: Path | None = field(default=None, repr=False)
     lazy_init: bool = field(default=False, repr=False)
 
     # Private fields for cached interpolators
@@ -79,8 +82,31 @@ class ProjectionService:
         Call this method to explicitly build interpolators when using
         lazy_init=True. This is called automatically by project().
         """
-        if self._azimuth_zenith_to_pixel_raw is None:
+        if self._azimuth_zenith_to_pixel_raw is None and self._pixel_coords is None:
             self._init_interpolators()
+
+    def _get_cache_path(self) -> Path | None:
+        """Get path for cached pixel coordinates.
+
+        Returns None if no calibration_path is set.
+        Cache is stored in calibration_path/.cache/ with a hash-based filename.
+        """
+        if self.calibration_path is None:
+            return None
+
+        cache_dir = self.calibration_path / ".cache"
+
+        # Build unique key from configuration
+        config_str = (
+            f"{self.calibration.image_size}"
+            f"{self.settings.resolution}"
+            f"{self.settings.square_size}"
+            f"{self.settings.cloud_height}"
+            f"{self.settings.max_zenith_angle}"
+        )
+        config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]  # noqa: S324
+
+        return cache_dir / f"pixel_coords_{self.settings.resolution}_{config_hash}.npy"
 
     def _init_interpolators(self) -> None:
         """Build the interpolation grids and cached interpolators.
@@ -89,7 +115,20 @@ class ProjectionService:
         1. The output grid based on square_size and resolution
         2. The azimuth/zenith values for each grid point
         3. The LinearNDInterpolator for azimuth/zenith → pixel mapping
+
+        If calibration_path is set, attempts to load cached pixel_coords first.
         """
+        from loguru import logger
+
+        # Try to load from cache first
+        cache_path = self._get_cache_path()
+        if cache_path and cache_path.exists():
+            self._pixel_coords = np.load(cache_path)
+            # Mark as initialized (we have pixel_coords, don't need interpolator)
+            # Set to a truthy value to satisfy ensure_initialized() check
+            self._azimuth_zenith_grid = np.array([0.0])  # Marker: initialized from cache
+            logger.debug(f"Loaded pixel_coords from cache: {cache_path}")
+            return
         resolution = self.settings.resolution
         square_size = self.settings.square_size
         cloud_height = self.settings.cloud_height
@@ -159,6 +198,12 @@ class ProjectionService:
         self._pixel_coords = self._azimuth_zenith_to_pixel_raw(
             self._azimuth_zenith_grid
         )
+
+        # Save to cache for next time
+        if cache_path:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            np.save(cache_path, self._pixel_coords)
+            logger.debug(f"Saved pixel_coords to cache: {cache_path}")
 
     def project(
         self,

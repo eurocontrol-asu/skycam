@@ -40,16 +40,20 @@ def calibration_data_session(calibration_path_session: Path) -> CalibrationData:
 
 
 @pytest.fixture(scope="session")
-def projector_session(calibration_data_session: CalibrationData) -> ProjectionService:
+def projector_session(
+    calibration_data_session: CalibrationData,
+    calibration_path_session: Path,
+) -> ProjectionService:
     """Session-cached projector with interpolators built once.
 
     Use this fixture for tests that actually need projection to work.
-    The interpolator build (~60s) happens once per session.
+    The interpolator build happens once, then cached to disk.
     """
     settings = ProjectionSettings()
     return ProjectionService(
         calibration=calibration_data_session,
         settings=settings,
+        calibration_path=calibration_path_session,  # Enable disk caching
         lazy_init=False,  # Build immediately, cached for session
     )
 
@@ -96,7 +100,10 @@ def calibration_loader(calibration_path: Path) -> JP2CalibrationLoader:
 
 
 @pytest.fixture
-def projector(calibration_data_session: CalibrationData) -> ProjectionService:
+def projector(
+    calibration_data_session: CalibrationData,
+    calibration_path: Path,
+) -> ProjectionService:
     """Create a ProjectionService for testing.
 
     Uses session-cached calibration data but creates fresh service instance.
@@ -106,6 +113,7 @@ def projector(calibration_data_session: CalibrationData) -> ProjectionService:
     return ProjectionService(
         calibration=calibration_data_session,
         settings=settings,
+        calibration_path=calibration_path,  # Enable disk caching
         lazy_init=False,
     )
 
