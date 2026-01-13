@@ -1,6 +1,5 @@
 """skycam - Fisheye image projection for ground-based sky observation."""
 
-# Re-export subpackages for convenience
 from skycam import adapters, config, domain
 from skycam._version import __version__
 

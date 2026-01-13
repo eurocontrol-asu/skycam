@@ -126,7 +126,7 @@ class ProjectionService:
             self._pixel_coords = np.load(cache_path)
             # Mark as initialized (we have pixel_coords, don't need interpolator)
             # Set to a truthy value to satisfy ensure_initialized() check
-            self._azimuth_zenith_grid = np.array([0.0])  # Marker: initialized from cache
+            self._azimuth_zenith_grid = np.array([0.0])
             logger.debug(f"Loaded pixel_coords from cache: {cache_path}")
             return
         resolution = self.settings.resolution

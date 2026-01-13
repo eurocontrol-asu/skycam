@@ -28,6 +28,7 @@ theme:
     - navigation.instant
     - navigation.tabs
     - navigation.top
+    - navigation.sections
     - search.suggest
     - search.highlight
     - content.code.copy
@@ -36,13 +37,24 @@ theme:
 
 nav:
   - Home: index.md
-  - Getting Started: getting-started.md
+  - 🚀 Tutorial: tutorial.md
+  - 🛠️ Guides: guides.md
+  - 🧠 Concepts: concepts.md
+  - 📚 Reference: reference.md
 
 markdown_extensions:
   - admonition
   - pymdownx.highlight:
       anchor_linenums: true
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.details
   - attr_list
   - md_in_html
+  - tables
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true

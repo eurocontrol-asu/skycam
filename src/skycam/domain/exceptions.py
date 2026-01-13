@@ -4,22 +4,14 @@
 class SkycamError(Exception):
     """Base exception for all skycam errors."""
 
-    pass
-
 
 class CalibrationError(SkycamError):
-    """Raised when calibration data cannot be loaded or is invalid."""
-
-    pass
+    """Raise when calibration data cannot be loaded or is invalid."""
 
 
 class ProjectionError(SkycamError):
-    """Raised when projection calculation fails."""
-
-    pass
+    """Raise when projection calculation fails."""
 
 
 class ConfigurationError(SkycamError):
-    """Raised when configuration is invalid or missing."""
-
-    pass
+    """Raise when configuration is invalid or missing."""
