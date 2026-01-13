@@ -22,9 +22,23 @@ uv add skycam
 ## Quick Start
 
 ```python
-from skycam import hello
+from pathlib import Path
 
-print(hello())
+from skycam.adapters import JP2CalibrationLoader, load_jp2
+from skycam.domain.models import ProjectionSettings
+from skycam.domain.projection import ProjectionService
+
+# Load calibration data
+loader = JP2CalibrationLoader(Path("calibration"))
+calibration = loader.load("visible")
+
+# Create projection service
+settings = ProjectionSettings(resolution=1024, cloud_height=10000.0)
+projector = ProjectionService(calibration=calibration, settings=settings)
+
+# Project a fisheye image
+image = load_jp2(Path("input.jp2"))
+projected = projector.project(image)
 ```
 
 ## Development

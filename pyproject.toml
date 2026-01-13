@@ -17,6 +17,13 @@ dependencies = [
     "loguru>=0.7.3",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
+    # Scientific computing (camera projection)
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "opencv-python>=4.9",
+    "geographiclib>=2.0",
+    "matplotlib>=3.10.8",
+    "scikit-image>=0.26.0",
 ]
 
 [build-system]
@@ -76,20 +83,29 @@ plugins = ["pydantic.mypy"]
 module = ["tests.*"]
 disallow_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = ["pydantic_settings.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["scipy.*", "cv2", "geographiclib.*"]
+ignore_missing_imports = true
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Pytest Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 addopts = [
     "-v",
     "--strict-markers",
     "--strict-config",
     "--tb=short",
-    "--cov=src/skycam",
-    "--cov-report=term-missing",
-    "--cov-report=xml",
+    "-m", "not slow",  # Skip slow tests by default
 ]
 asyncio_mode = "auto"
 
