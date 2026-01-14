@@ -5,6 +5,7 @@ and function-scoped fixtures for isolation where needed.
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -12,8 +13,11 @@ from numpy.typing import NDArray
 
 from skycam.adapters.calibration import JP2CalibrationLoader
 from skycam.adapters.image_io import load_jp2
-from skycam.domain.models import CalibrationData, ProjectionSettings
+from skycam.domain.models import CalibrationData, Position, ProjectionSettings
 from skycam.domain.projection import ProjectionService
+
+if TYPE_CHECKING:
+    from skycam.domain.aircraft_projection import AircraftProjector
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Session-scoped fixtures (computed once per test session for speed)
@@ -122,3 +126,44 @@ def projector(
 def sample_image(gold_inputs_path: Path) -> NDArray[np.uint8]:
     """Load a sample input image for testing."""
     return load_jp2(gold_inputs_path / "image_20250215080830.jp2")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Aircraft Projection fixtures
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def aircraft_projector() -> "AircraftProjector":
+    """Create an AircraftProjector with default ECTL camera position."""
+    from skycam.domain.aircraft_projection import AircraftProjector
+
+    # Use Position model defaults (ECTL Bretigny coordinates)
+    pos = Position()
+    return AircraftProjector(
+        camera_lat=pos.latitude,
+        camera_lon=pos.longitude,
+        camera_alt=pos.altitude,
+    )
+
+
+@pytest.fixture
+def aircraft_projector_custom_settings() -> "AircraftProjector":
+    """Create an AircraftProjector with custom settings."""
+    from skycam.domain.aircraft_projection import (
+        AircraftProjectionSettings,
+        AircraftProjector,
+    )
+
+    pos = Position()
+    settings = AircraftProjectionSettings(
+        cloud_height=12000.0,
+        square_size=100000.0,
+        resolution=2048,
+    )
+    return AircraftProjector(
+        camera_lat=pos.latitude,
+        camera_lon=pos.longitude,
+        camera_alt=pos.altitude,
+        settings=settings,
+    )

@@ -30,6 +30,7 @@
 |---------|-------------|
 | ⚡ **Numba JIT** | ~100x faster projection via compiled bilinear interpolation |
 | 💾 **Coordinate Cache** | Sub-100ms init after first calibration load |
+| 🛫 **Aircraft Projection** | Vectorized lon/lat/alt → pixel conversion with Shapely support |
 | 🏛️ **Hexagonal Architecture** | Clean separation of domain, adapters, and config |
 | ✅ **Pydantic v2** | Validated settings with environment variable support |
 | 🔬 **Scientific Accuracy** | WGS84 geodesic calculations via GeographicLib |

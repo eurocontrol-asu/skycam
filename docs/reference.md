@@ -113,6 +113,89 @@ Calculate target position from viewing angles.
 
 ---
 
+### `AircraftProjector`
+
+Vectorized projection for aircraft positions and Shapely geometries. Uses an analytical camera model based on WGS84 geodesic calculations.
+
+```python
+from skycam.domain.aircraft_projection import AircraftProjector
+```
+
+#### Constructor
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `camera_lat` | `float` | *required* | Camera latitude (degrees) |
+| `camera_lon` | `float` | *required* | Camera longitude (degrees) |
+| `camera_alt` | `float` | *required* | Camera altitude (meters) |
+| `settings` | `AircraftProjectionSettings \| None` | `None` | Projection config |
+
+#### Methods
+
+##### `lonlat_to_pixels(lon, lat, alt_m)`
+
+Convert geographic positions to pixel coordinates (vectorized).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lon` | `NDArray[float64]` | Longitude array (degrees) |
+| `lat` | `NDArray[float64]` | Latitude array (degrees) |
+| `alt_m` | `NDArray[float64]` | Altitude array (meters) |
+
+**Returns:** `tuple[NDArray, NDArray]` — (px, py) pixel coordinates
+
+##### `pixels_to_lonlat(px, py, alt_m)`
+
+Convert pixel coordinates to geographic positions (vectorized).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `px` | `NDArray[float64]` | Pixel X coordinates |
+| `py` | `NDArray[float64]` | Pixel Y coordinates |
+| `alt_m` | `NDArray[float64]` | Altitude array (meters) |
+
+**Returns:** `tuple[NDArray, NDArray]` — (lon, lat) in degrees
+
+##### `project_geometry(geom)`
+
+Project a 3D Shapely geometry to pixel space.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `geom` | `BaseGeometry` | 3D geometry (lon, lat, alt_m) |
+
+**Returns:** `BaseGeometry` — Projected geometry (px, py, alt_m)
+
+**Raises:** `ValueError` if geometry lacks Z coordinate
+
+##### `project_geometry_back(geom)`
+
+Project a 3D Shapely geometry from pixel space to geographic.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `geom` | `BaseGeometry` | 3D geometry (px, py, alt_m) |
+
+**Returns:** `BaseGeometry` — Geographic geometry (lon, lat, alt_m)
+
+---
+
+### `AircraftProjectionSettings`
+
+Immutable configuration for aircraft projection.
+
+```python
+from skycam.domain.aircraft_projection import AircraftProjectionSettings
+```
+
+| Field | Type | Default | Constraints | Description |
+|-------|------|---------|-------------|-------------|
+| `cloud_height` | `float` | `10000.0` | `≥ 100` | Reference altitude for projection (meters) |
+| `square_size` | `float` | `75000.0` | `≥ 1000` | Physical grid size (meters) |
+| `resolution` | `int` | `1024` | `64 ≤ x ≤ 8192` | Output grid resolution (pixels) |
+
+---
+
 ### `ProjectionSettings`
 
 Immutable configuration for the projection algorithm.

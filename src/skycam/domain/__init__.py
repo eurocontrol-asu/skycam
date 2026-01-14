@@ -1,5 +1,9 @@
 """Domain layer: Pure business logic with no I/O dependencies."""
 
+from skycam.domain.aircraft_projection import (
+    AircraftProjectionSettings,
+    AircraftProjector,
+)
 from skycam.domain.exceptions import (
     CalibrationError,
     ConfigurationError,
@@ -13,6 +17,8 @@ from skycam.domain.models import (
 )
 
 __all__ = [
+    "AircraftProjectionSettings",
+    "AircraftProjector",
     "CalibrationError",
     "CameraConfig",
     "ConfigurationError",
