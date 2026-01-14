@@ -117,3 +117,20 @@ class TestSaveImage:
         output_path = tmp_path / "invalid.jpg"
         with pytest.raises(SkycamError):
             save_image(invalid_image, output_path)
+
+    def test_load_nonexistent_raises_error(self, tmp_path: Path) -> None:
+        """load_image raises SkycamError for non-existent file."""
+        from skycam.adapters.image_io import load_image
+
+        nonexistent = tmp_path / "does_not_exist.jpg"
+        with pytest.raises(SkycamError, match="not found"):
+            load_image(nonexistent)
+
+    def test_load_corrupted_raises_error(self, tmp_path: Path) -> None:
+        """load_image raises SkycamError for corrupted file."""
+        from skycam.adapters.image_io import load_image
+
+        corrupted = tmp_path / "corrupted.jpg"
+        corrupted.write_bytes(b"not a valid image")
+        with pytest.raises(SkycamError, match="Failed to load"):
+            load_image(corrupted)

@@ -83,3 +83,20 @@ class TestJP2CalibrationLoader:
         loader = JP2CalibrationLoader(fixtures_path / "nonexistent")
         with pytest.raises(CalibrationError, match="not found"):
             loader.load("visible")
+
+    def test_corrupted_file_raises_error(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Corrupted calibration file raises CalibrationError."""
+        # Create a fake corrupted JP2 file
+        calibration_dir = tmp_path / "calibration"
+        calibration_dir.mkdir()
+        corrupted_file = calibration_dir / "azimuth_visible.jp2"
+        corrupted_file.write_bytes(b"not a valid jp2 file")
+        zenith_file = calibration_dir / "zenith_visible.jp2"
+        zenith_file.write_bytes(b"also invalid")
+
+        loader = JP2CalibrationLoader(calibration_dir)
+        with pytest.raises(CalibrationError, match="Failed to load"):
+            loader.load("visible")
