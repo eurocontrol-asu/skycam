@@ -26,6 +26,7 @@ clean:  ## Clean artifacts
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml dist
 
 docs-serve:  ## Serve docs locally
+	uv sync --group docs --quiet
 	uv run mkdocs serve
 
 help:  ## Show help

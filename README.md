@@ -10,7 +10,7 @@
   <a href="https://github.com/eurocontrol-asu/skycam/actions/workflows/ci.yml"><img src="https://github.com/eurocontrol-asu/skycam/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://coveralls.io/github/eurocontrol-asu/skycam?branch=main"><img src="https://coveralls.io/repos/github/eurocontrol-asu/skycam/badge.svg?branch=main" alt="Coverage"></a>
   <!-- Stack -->
-  <img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+">
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/pydantic-v2-E92063" alt="Pydantic v2">
   <img src="https://img.shields.io/badge/typed-strict-blue" alt="Typed">
   <!-- Tooling -->

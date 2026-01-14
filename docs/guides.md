@@ -71,46 +71,115 @@ SKYCAM_CATEGORY=visible
 
 ---
 
-## 📍 How to Calculate Geographic Coordinates
+## 📍 How to Convert Pixels to Geographic Coordinates
 
-**Problem:** You need to find the lat/lon of an aircraft visible in the image.
+**Problem:** You need to find the lat/lon of an object at a specific pixel location in the projected image.
 
-**Solution:** Use `calculate_latitude_longitude()` with known azimuth/zenith.
+**Solution:** Use `AircraftProjector.pixels_to_lonlat()` with the target altitude.
 
 ```python
-from skycam.domain.projection import ProjectionService
-from skycam.domain.models import ProjectionSettings, CalibrationData
 import numpy as np
+from skycam.domain import AircraftProjector, Position
 
-# Create a minimal projector (calibration not needed for geo calculations)
-calibration = CalibrationData(
-    azimuth_array=np.zeros((10, 10)),
-    zenith_array=np.zeros((10, 10)),
-    image_size=(10, 10),
-)
-projector = ProjectionService(
-    calibration=calibration,
-    settings=ProjectionSettings(),
-    lazy_init=True,  # Skip interpolator build
+# Camera position
+pos = Position()  # Uses ECTL Bretigny defaults, or pass custom values
+projector = AircraftProjector(
+    camera_lat=pos.latitude,
+    camera_lon=pos.longitude,
+    camera_alt=pos.altitude,
 )
 
-# Observer position (camera location)
-observer_lat = 48.6005
-observer_lon = 2.3468
-observer_alt = 90.0
+# Pixel coordinates of interest (e.g., from click or detection)
+px = np.array([512.0])  # X pixel
+py = np.array([400.0])  # Y pixel
+alt = np.array([10000.0])  # Assumed altitude in meters
 
-# Calculate target position from viewing angles
-lat, lon = projector.calculate_latitude_longitude(
-    azimuth=45.0,        # degrees from north
-    zenith=30.0,         # degrees from vertical
-    target_altitude=10000.0,  # aircraft altitude in meters
-    observer_lat=observer_lat,
-    observer_lon=observer_lon,
-    observer_alt=observer_alt,
-)
+# Convert to geographic coordinates
+lon, lat = projector.pixels_to_lonlat(px, py, alt)
 
-print(f"Aircraft at: {lat:.4f}°N, {lon:.4f}°E")
+print(f"Object at: {lat[0]:.4f}°N, {lon[0]:.4f}°E")
 ```
+
+---
+
+## 🛫 How to Overlay Aircraft Positions
+
+**Problem:** You have aircraft positions (ADS-B data) and want to plot them on a projected image.
+
+**Solution:** Use `AircraftProjector` for vectorized lon/lat → pixel conversion.
+
+```python
+import numpy as np
+from skycam.domain import AircraftProjector, Position
+
+# Use default camera position (ECTL Bretigny)
+pos = Position()
+projector = AircraftProjector(
+    camera_lat=pos.latitude,
+    camera_lon=pos.longitude,
+    camera_alt=pos.altitude,
+)
+
+# Aircraft positions from ADS-B feed
+lon = np.array([2.30, 2.35, 2.40, 2.45])
+lat = np.array([48.55, 48.60, 48.65, 48.70])
+alt = np.array([10000.0, 10500.0, 11000.0, 10800.0])  # meters
+
+# Convert to pixel coordinates
+px, py = projector.lonlat_to_pixels(lon, lat, alt)
+
+# Plot on your projected image
+import matplotlib.pyplot as plt
+plt.scatter(px, py, c='red', s=20, label='Aircraft')
+```
+
+---
+
+## ✈️ How to Project Flight Paths (Shapely)
+
+**Problem:** You want to draw flight paths or airspace boundaries on a projected image.
+
+**Solution:** Use `project_geometry()` with 3D Shapely geometries.
+
+```python
+from shapely.geometry import LineString, Polygon
+from skycam.domain import AircraftProjector, Position
+
+pos = Position()
+projector = AircraftProjector(
+    camera_lat=pos.latitude,
+    camera_lon=pos.longitude,
+    camera_alt=pos.altitude,
+)
+
+# Flight path as 3D LineString (lon, lat, alt_meters)
+flight_path = LineString([
+    (2.30, 48.55, 10000),
+    (2.35, 48.58, 10200),
+    (2.40, 48.62, 10500),
+    (2.45, 48.65, 10300),
+])
+
+# Project to pixel coordinates
+path_pixels = projector.project_geometry(flight_path)
+
+# Draw with matplotlib
+import matplotlib.pyplot as plt
+coords = np.array(path_pixels.coords)
+plt.plot(coords[:, 0], coords[:, 1], 'b-', linewidth=2, label='Flight path')
+
+# Airspace sector as 3D Polygon
+sector = Polygon([
+    (2.25, 48.50, 9000),
+    (2.50, 48.50, 9000),
+    (2.50, 48.70, 9000),
+    (2.25, 48.70, 9000),
+])
+sector_pixels = projector.project_geometry(sector)
+```
+
+!!! note "Altitude is required"
+    All geometries must have Z coordinates (altitude in meters). 2D geometries will raise `ValueError`.
 
 ---
 

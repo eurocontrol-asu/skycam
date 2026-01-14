@@ -20,7 +20,7 @@ hide:
   <a href="https://pypi.org/project/skycam/">
     <img src="https://img.shields.io/pypi/v/skycam" alt="PyPI" />
   </a>
-  <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+" />
+  <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+" />
   <img src="https://img.shields.io/badge/typed-strict-blue.svg" alt="Typed" />
   <a href="https://github.com/astral-sh/ruff">
     <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff" />

@@ -81,36 +81,6 @@ Project a fisheye image to the output grid.
 
 Explicitly build interpolators. Called automatically by `project()`.
 
-##### `calculate_azimuth_zenith(...)`
-
-Calculate viewing angles from observer to target.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `target_lat` | `float` | Target latitude (degrees) |
-| `target_lon` | `float` | Target longitude (degrees) |
-| `target_alt` | `float` | Target altitude (meters) |
-| `observer_lat` | `float` | Observer latitude (degrees) |
-| `observer_lon` | `float` | Observer longitude (degrees) |
-| `observer_alt` | `float` | Observer altitude (meters) |
-
-**Returns:** `tuple[float, float]` — (azimuth_degrees, zenith_degrees)
-
-##### `calculate_latitude_longitude(...)`
-
-Calculate target position from viewing angles.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `azimuth` | `float` | Azimuth angle (degrees) |
-| `zenith` | `float` | Zenith angle (degrees) |
-| `target_altitude` | `float` | Target altitude (meters) |
-| `observer_lat` | `float` | Observer latitude (degrees) |
-| `observer_lon` | `float` | Observer longitude (degrees) |
-| `observer_alt` | `float` | Observer altitude (meters) |
-
-**Returns:** `tuple[float, float]` — (latitude, longitude) in degrees
-
 ---
 
 ### `AircraftProjector`
