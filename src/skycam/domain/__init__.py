@@ -15,15 +15,18 @@ from skycam.domain.models import (
     Position,
     ProjectionSettings,
 )
+from skycam.domain.reprojection import CalibratedReprojection, SamplingMap
 
 __all__ = [
     "AircraftProjectionSettings",
     "AircraftProjector",
+    "CalibratedReprojection",
     "CalibrationError",
     "CameraConfig",
     "ConfigurationError",
     "Position",
     "ProjectionError",
     "ProjectionSettings",
+    "SamplingMap",
     "SkycamError",
 ]

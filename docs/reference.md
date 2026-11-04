@@ -45,6 +45,12 @@ settings = SkycamSettings(
 
 ## 🎯 Domain Layer
 
+### Calibrated reprojection
+
+See [Calibrated reprojection](reprojection.md) for `CalibratedReprojection` and
+`SamplingMap`: bidirectional calibrated pixel/direction conversion and reusable
+dense sampling maps for continuous images, labels and independent instance masks.
+
 ### `ProjectionService`
 
 Main projection engine. Converts fisheye images to regular grids.
