@@ -121,7 +121,7 @@ def holdout_aircraft_campaign(settings: Settings, days: list[str] | None = None)
         f"evaluation A on holdout days {', '.join(days)} with the frozen configuration (no refit)",
     )
     p = GPParams.from_config(settings.gp)
-    kw = {
+    kw: dict[str, Any] = {
         "cutoff": settings.gp.cutoff,
         "tile_minutes": settings.gp.tile_minutes,
         "max_neighbours": settings.gp.max_neighbours,
