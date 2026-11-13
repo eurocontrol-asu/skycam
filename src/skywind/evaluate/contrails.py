@@ -131,3 +131,31 @@ def age_table(errors: Mapping[str, pd.DataFrame], fits: Mapping[str, pd.DataFram
                 }
             )
     return pd.DataFrame(rows)
+
+
+def paired_tests(paired: pd.DataFrame, ref: str = "era5") -> pd.DataFrame:
+    """Per day and pooled, for each method: Wilcoxon signed-rank and sign tests of |drift_ref| - |drift_method| > 0
+    (one-sided: the method reduces the drift error)."""
+    from scipy.stats import binomtest, wilcoxon
+
+    methods = [c.removeprefix("drift_") for c in paired.columns if c.startswith("drift_") and c != f"drift_{ref}"]
+    rows = []
+    for day, g in [*paired.groupby("day"), ("pooled", paired)]:
+        for m in methods:
+            d = (g[f"drift_{ref}"].abs() - g[f"drift_{m}"].abs()).to_numpy()
+            d = d[np.isfinite(d) & (d != 0)]
+            n_pos = int((d > 0).sum())
+            w = wilcoxon(d, alternative="greater").pvalue if len(d) >= 5 else np.nan
+            b = binomtest(n_pos, len(d), 0.5, alternative="greater").pvalue if len(d) else np.nan
+            rows.append(
+                {
+                    "day": day,
+                    "method": m,
+                    "n_flights": len(d),
+                    "n_improved": n_pos,
+                    "median_reduction_m_per_min": float(np.median(d)) if len(d) else np.nan,
+                    "wilcoxon_p": float(w),
+                    "sign_test_p": float(b),
+                }
+            )
+    return pd.DataFrame(rows)

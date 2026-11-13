@@ -23,6 +23,7 @@ from skywind.evaluate.contrails import (
     cross_track_errors,
     drift_table,
     flight_fits,
+    paired_tests,
 )
 from skywind.field.data import ObsSet
 from skywind.field.diagnostics import desroziers, fit_correlation_length, hollingsworth_lonnberg
@@ -317,6 +318,7 @@ def summarise_contrails(
     for k, sd in stds.items():
         sd.to_parquet(out / f"stds_{k}.parquet", index=False)
     paired.to_csv(out / "flights_paired.csv", index=False)
+    paired_tests(paired).to_csv(out / "paired_tests.csv", index=False)
     drifts.to_csv(out / "drift_summary.csv", index=False)
     ages.to_csv(out / "age_summary.csv", index=False)
     pd.DataFrame(calib).to_csv(out / "uncertainty_calibration.csv", index=False)
