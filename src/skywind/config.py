@@ -100,7 +100,6 @@ class Site(BaseModel):
     camera_lon: float = 2.3467954996250784
     camera_alt_m: float = 90.0
     camera_x_offset_px: float = 1.0  # GVCCS image x = fitted x + 1 (dataset's own PIXEL_X convention)
-    camera_x_offset_px: float = 1.0  # GVCCS image x = fitted x + 1 (dataset's own PIXEL_X convention)
     box_deg: float = 1.5
     min_alt_ft: float = 25000.0
     max_alt_ft: float = 41000.0
