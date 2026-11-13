@@ -13,7 +13,7 @@ class ConstantResidual:
     name = "constant"
     prior_var = 4.0
 
-    def predict(self, points: Points) -> Prediction:
+    def predict(self, points: Points, variance: object = None) -> Prediction:
         n = len(points)
         return Prediction(np.full(n, 1.5), np.full(n, -0.5), np.full(n, 1.0), np.full(n, 4.0), np.zeros(n), 4.0)
 

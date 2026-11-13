@@ -8,6 +8,7 @@ uncertainty, not a calibrated posterior).
 from __future__ import annotations
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 from skywind.config import RidgeConfig
@@ -47,7 +48,8 @@ class RidgeEstimator:
         det = A11 * A22 - A12**2
         return (A22 * b1 - A12 * b2) / det, (A11 * b2 - A12 * b1) / det, A22 / det, A11 / det, -A12 / det
 
-    def predict(self, points: Points) -> Prediction:
+    def predict(self, points: Points, variance: npt.NDArray[np.bool_] | None = None) -> Prediction:
+        """Ridge solution at every point (``variance`` is accepted for interface compatibility; it is cheap here)."""
         parts = [self._solve(self._weights(points.X[s : s + _CHUNK])) for s in range(0, len(points), _CHUNK)]
         cols = [np.concatenate([p[i] for p in parts]) if parts else np.zeros(0) for i in range(5)]
         return Prediction(cols[0], cols[1], cols[2], cols[3], cols[4], prior_var=self.prior_var)

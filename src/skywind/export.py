@@ -17,6 +17,7 @@ import xarray as xr
 
 from skywind.config import ExportConfig, Site
 from skywind.field.data import Points
+from skywind.geo import isa_altitude_m, local_xy_km
 from skywind.windfield import ResidualEstimator
 
 __all__ = ["CF_NAMES", "era5_on_grid", "export_grid", "residual_dataset", "to_met_dataset", "write_netcdf"]
@@ -66,29 +67,75 @@ def era5_on_grid(era5: xr.Dataset, grid: dict[str, np.ndarray]) -> xr.Dataset:
     )
 
 
-def residual_dataset(ds: xr.Dataset, estimator: ResidualEstimator, site: Site) -> xr.Dataset:
-    """Residual posterior on every node of ``ds`` (ERA5 on the export grid, short names u, v...)."""
-    sub = ds[["u", "v"]].transpose("time", "level", "latitude", "longitude")
-    T, P, LA, LO = np.meshgrid(
-        sub["time"].values.astype("datetime64[ns]").astype(np.int64) / 1e9,
-        sub["level"].values,
-        sub["latitude"].values,
-        sub["longitude"].values,
-        indexing="ij",
-    )
+def _stride_mask(n: int, stride: int) -> np.ndarray:
+    m = np.zeros(n, bool)
+    m[:: max(stride, 1)] = True
+    m[-1] = True
+    return m
+
+
+def _posterior_on_grid(
+    sub: xr.Dataset, estimator: ResidualEstimator, site: Site, want: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Posterior arrays (time, level, latitude, longitude); factorised grid solver when the estimator has one."""
+    times = sub["time"].values.astype("datetime64[ns]").astype(np.int64) / 1e9
+    lat, lon, lev = sub["latitude"].values, sub["longitude"].values, sub["level"].values
+    shape = (len(times), len(lev), len(lat), len(lon))
+    grid_solver = getattr(estimator, "predict_grid", None)
+    if grid_solver is not None:
+        LA, LO = np.meshgrid(lat, lon, indexing="ij")
+        x, y = local_xy_km(LA.ravel(), LO.ravel(), site.lat, site.lon)
+        res = grid_solver(times, isa_altitude_m(lev * 100.0), np.stack([x, y], 1), want[0].reshape(len(lev), -1))
+        return {k: v.reshape(shape) for k, v in res.items()}
+    T, P, LA4, LO4 = np.meshgrid(times, lev, lat, lon, indexing="ij")
     bg = np.stack([np.nan_to_num(sub["u"].values.ravel()), np.nan_to_num(sub["v"].values.ravel())], 1)
-    pred = estimator.predict(Points.from_geo(site, T.ravel(), P.ravel(), LA.ravel(), LO.ravel(), bg))
-    dims = ("time", "level", "latitude", "longitude")
-    shape = T.shape
-    fields = {
-        "residual_eastward_wind": pred.du,
-        "residual_northward_wind": pred.dv,
-        "residual_eastward_wind_std": pred.std_u,
-        "residual_northward_wind_std": pred.std_v,
-        "residual_wind_covariance": pred.cov_uv,
-        "residual_information": pred.information,
+    pred = estimator.predict(
+        Points.from_geo(site, T.ravel(), P.ravel(), LA4.ravel(), LO4.ravel(), bg), variance=want.ravel()
+    )
+    return {
+        "du": pred.du.reshape(shape),
+        "dv": pred.dv.reshape(shape),
+        "var_u": pred.var_u.reshape(shape),
+        "var_v": pred.var_v.reshape(shape),
+        "cov_uv": pred.cov_uv.reshape(shape),
     }
-    return xr.Dataset({k: (dims, v.reshape(shape).astype(np.float32)) for k, v in fields.items()}, coords=sub.coords)
+
+
+def residual_dataset(
+    ds: xr.Dataset, estimator: ResidualEstimator, site: Site, stride_h: int = 1, stride_level: int = 1
+) -> xr.Dataset:
+    """Residual posterior on every node of ``ds`` (ERA5 on the export grid, short names u, v...).
+
+    The posterior mean is computed on every node; the posterior variance on every ``stride_h``-th horizontal node and
+    ``stride_level``-th level (1 = everywhere), then linearly interpolated to the other nodes."""
+    sub = ds[["u", "v"]].transpose("time", "level", "latitude", "longitude")
+    dims = ("time", "level", "latitude", "longitude")
+    masks = [
+        np.ones(len(sub["time"]), bool),
+        _stride_mask(len(sub["level"]), stride_level),
+        _stride_mask(len(sub["latitude"]), stride_h),
+        _stride_mask(len(sub["longitude"]), stride_h),
+    ]
+    coarse = np.ix_(*masks)
+    want = np.zeros([len(m) for m in masks], bool)
+    want[coarse] = True
+    post = _posterior_on_grid(sub, estimator, site, want)
+    out = xr.Dataset(
+        {"residual_eastward_wind": (dims, post["du"]), "residual_northward_wind": (dims, post["dv"])},
+        coords=sub.coords,
+    )
+    full = {}
+    for name in ("var_u", "var_v", "cov_uv"):
+        da = xr.DataArray(
+            post[name][coarse], dims=dims, coords={d: sub[d].values[m] for d, m in zip(dims, masks, strict=True)}
+        )
+        full[name] = da.interp({d: sub[d].values for d in dims[1:]}, method="linear").values
+    info = 1 - 0.5 * (full["var_u"] + full["var_v"]) / estimator.prior_var
+    out["residual_eastward_wind_std"] = (dims, np.sqrt(np.maximum(full["var_u"], 0)))
+    out["residual_northward_wind_std"] = (dims, np.sqrt(np.maximum(full["var_v"], 0)))
+    out["residual_wind_covariance"] = (dims, full["cov_uv"])
+    out["residual_information"] = (dims, info)
+    return out.astype(np.float32)
 
 
 def to_met_dataset(ds: xr.Dataset, residual: xr.Dataset, attrs: dict[str, Any]) -> xr.Dataset:

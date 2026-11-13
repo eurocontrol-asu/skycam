@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 from skywind.config import Settings
@@ -23,7 +24,7 @@ class ResidualEstimator(Protocol):
     @property
     def prior_var(self) -> float: ...
 
-    def predict(self, points: Points) -> Prediction: ...
+    def predict(self, points: Points, variance: npt.NDArray[np.bool_] | None = None) -> Prediction: ...
 
 
 def build_estimator(obs: ObsSet, settings: Settings, method: str = "gp") -> ResidualEstimator:

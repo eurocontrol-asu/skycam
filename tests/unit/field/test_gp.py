@@ -146,3 +146,33 @@ def test_flow_following_shifts_structures_with_background_wind() -> None:
     q = Points(q.X, np.array([[50.0, 0.0], [50.0, 0.0]]))
     pred = GPEstimator(obs, p).predict(q)
     assert pred.du[0] > 2.0 > pred.du[1]  # the structure moved 60 km downstream
+
+
+@pytest.mark.parametrize("flow", [False, True])
+def test_grid_solver_matches_pointwise_prediction(flow: bool) -> None:
+    obs = tracks([0.0, 90.0, 45.0], n_tracks=4)
+    obs = ObsSet(
+        obs.X
+        + np.c_[
+            np.zeros((len(obs), 2)),
+            np.linspace(-300, 300, len(obs))[:, None],
+            np.linspace(-1800, 1800, len(obs))[:, None],
+        ],
+        obs.e,
+        obs.y,
+        obs.kind,
+        obs.aircraft,
+        np.tile([[30.0, -10.0]], (len(obs), 1)),
+        obs.day,
+        obs.icao24,
+    )
+    p = GPParams(**{**PARAMS.as_dict(), "kernel": "matern32", "flow_following": flow})
+    est = GPEstimator(obs, p, cutoff=50.0, tile_minutes=1e-3, max_neighbours=100_000)
+    times, z = np.array([T0 - 600, T0 + 600]), np.array([9800.0, 10200.0])
+    xy = np.stack(np.meshgrid(np.linspace(-80, 80, 5), np.linspace(-60, 60, 4)), -1).reshape(-1, 2)
+    grid = est.predict_grid(times, z, xy)
+    T, Z, H = np.meshgrid(times, z, np.arange(len(xy)), indexing="ij")
+    X = np.stack([xy[H.ravel(), 0], xy[H.ravel(), 1], Z.ravel(), T.ravel()], 1)
+    pts = est.predict(Points(X, np.zeros((len(X), 2))))
+    np.testing.assert_allclose(grid["du"].ravel(), pts.du, atol=1e-8)
+    np.testing.assert_allclose(grid["var_v"].ravel(), pts.var_v, atol=1e-8)

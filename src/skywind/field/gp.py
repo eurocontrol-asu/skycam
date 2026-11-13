@@ -17,17 +17,26 @@ from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from scipy.linalg import cho_factor, cho_solve, solve_triangular
 
 from skywind.config import GPConfig
 from skywind.field.data import ALONG, CROSS, IntArray, ObsSet, Points, Prediction
-from skywind.field.kernels import Kernel, Lengths, correlation, correlation_and_grads, flow_coordinates
+from skywind.field.kernels import (
+    Kernel,
+    Lengths,
+    correlation,
+    correlation_and_grads,
+    factor_correlations,
+    flow_coordinates,
+)
 from skywind.geo import FloatArray
 
 __all__ = ["GPEstimator", "GPParams", "centred", "covariance", "covariance_and_grads", "cross_covariance"]
 
 _JITTER = 1e-8
+_BLOCK = 3000  # targets per block inside a tile (memory: block x neighbours matrices)
 
 
 @dataclass(frozen=True)
@@ -137,6 +146,14 @@ class GPEstimator:
         self.tile_s = tile_minutes * 60.0
         self.max_neighbours = max_neighbours
         self.yc = centred(obs, params)
+        self._cache_key: tuple[int, int] | None = None
+        self._cache: tuple[IntArray, ObsSet, Any, FloatArray, float] = (
+            np.zeros(0, np.int64),
+            obs,
+            None,
+            np.zeros(0),
+            0.0,
+        )
 
     @classmethod
     def from_config(cls, obs: ObsSet, cfg: GPConfig) -> GPEstimator:
@@ -171,34 +188,108 @@ class GPEstimator:
         return [g.astype(np.int64) for g in np.split(order, np.flatnonzero(np.diff(keys[order])) + 1) if len(g)]
 
     # ---------------------------------------------------------------- prediction
-    def predict(self, points: Points) -> Prediction:
+    def predict(self, points: Points, variance: npt.NDArray[np.bool_] | None = None) -> Prediction:
+        """Posterior at ``points``. ``variance`` (boolean mask) restricts the (costly) variance computation to a subset
+        of points; elsewhere the returned variance is the prior variance."""
         m = len(points)
         out = {k: np.zeros(m) for k in ("du", "dv", "cov_uv")}
         out["var_u"], out["var_v"] = np.full(m, self.prior_var), np.full(m, self.prior_var)
         if m == 0 or len(self.obs) == 0:
             return Prediction(**out, prior_var=self.prior_var)
+        want = np.ones(m, bool) if variance is None else np.asarray(variance, bool)
+        self._cache_key = None
         for q in self._tiles(points.X):
-            self._predict_tile(points, q, out)
+            for start in range(0, len(q), _BLOCK):
+                self._predict_tile(points, q, q[start : start + _BLOCK], want, out)
         return Prediction(**out, prior_var=self.prior_var)
 
-    def _predict_tile(self, points: Points, q: IntArray, out: dict[str, FloatArray]) -> None:
-        sub = Points(points.X[q], points.bg[q])
-        t0 = float(sub.X[:, 3].mean())
-        sel = self._neighbours(_coords(sub.X, sub.bg, self.p, t0), t0)
-        if len(sel) == 0:
-            return
+    def _tile_system(self, X: FloatArray, bg: FloatArray) -> tuple[IntArray, ObsSet, Any, FloatArray, float]:
+        """Neighbours of a tile, Cholesky factor of their covariance and alpha = C^-1 (y - prior mean)."""
+        t0 = float(X[:, 3].mean())
+        sel = self._neighbours(_coords(X, bg, self.p, t0), t0)
         obs = self.obs.subset(sel)
+        if len(sel) == 0:
+            return sel, obs, None, np.zeros(0), t0
         C = covariance(obs, self.p, t0)
         C[np.diag_indices_from(C)] += _JITTER
-        L = cho_factor(C, lower=True)
-        alpha = cho_solve(L, self.yc[sel])
-        Ku, Kv = cross_covariance(sub, obs, self.p, t0)
-        Vu = solve_triangular(L[0], Ku.T, lower=True)
-        Vv = solve_triangular(L[0], Kv.T, lower=True)
-        out["du"][q], out["dv"][q] = Ku @ alpha, Kv @ alpha
-        out["var_u"][q] = self.prior_var - (Vu**2).sum(0)
-        out["var_v"][q] = self.prior_var - (Vv**2).sum(0)
-        out["cov_uv"][q] = -(Vu * Vv).sum(0)
+        L = cho_factor(C, lower=True, overwrite_a=True)
+        return sel, obs, L, cho_solve(L, self.yc[sel]), t0
+
+    def _predict_tile(self, points: Points, tile: IntArray, q: IntArray, want: Any, out: dict[str, FloatArray]) -> None:
+        """Targets ``q`` (a block of ``tile``): neighbours chosen for the whole tile, so blocks share one system."""
+        key = (int(tile[0]), len(tile))
+        if self._cache_key != key:
+            self._cache = self._tile_system(points.X[tile], points.bg[tile])
+            self._cache_key = key
+        sel, obs, L, alpha, t0 = self._cache
+        if len(sel) == 0:
+            return
+        k = correlation(
+            _coords(points.X[q], points.bg[q], self.p, t0),
+            _coords(obs.X, obs.bg, self.p, t0),
+            self.p.lengths,
+            self.p.kernel,
+        )
+        sf2 = self.p.sigma_field**2
+        out["du"][q] = sf2 * (k @ (alpha * obs.e[:, 0]))
+        out["dv"][q] = sf2 * (k @ (alpha * obs.e[:, 1]))
+        v = want[q] & (k.max(1) > 1e-6)
+        if not v.any():
+            return
+        kv = sf2 * k[v]
+        Vu = solve_triangular(L[0], (kv * obs.e[None, :, 0]).T, lower=True, check_finite=False)
+        Vv = solve_triangular(L[0], (kv * obs.e[None, :, 1]).T, lower=True, check_finite=False)
+        qv = q[v]
+        out["var_u"][qv] = self.prior_var - (Vu**2).sum(0)
+        out["var_v"][qv] = self.prior_var - (Vv**2).sum(0)
+        out["cov_uv"][qv] = -(Vu * Vv).sum(0)
+
+    # ---------------------------------------------------------------- gridded prediction (export)
+    def predict_grid(
+        self, times: FloatArray, z_m: FloatArray, xy_km: FloatArray, variance: npt.NDArray[np.bool_] | None = None
+    ) -> dict[str, FloatArray]:
+        """Posterior on a grid (times x altitudes x horizontal nodes), one local system per time and altitude band.
+
+        All targets of a time share the reference time, so (flow-following or not) their coordinates are not displaced
+        and the separable correlation factorises: the mean is a matrix product. ``variance`` (altitudes x nodes) selects
+        where the posterior variance is computed (prior variance elsewhere). Returns arrays of shape (T, L, H)."""
+        shape = (len(times), len(z_m), len(xy_km))
+        out = {k: np.zeros(shape) for k in ("du", "dv", "cov_uv")}
+        out["var_u"], out["var_v"] = np.full(shape, self.prior_var), np.full(shape, self.prior_var)
+        want = np.ones(shape[1:], bool) if variance is None else np.asarray(variance, bool)
+        if len(self.obs) == 0:
+            return out
+        z_all = np.asarray(z_m, float)
+        band = np.floor(z_all / (2 * self.cutoff * self.p.length_z_m)).astype(np.int64)
+        for i, t0 in enumerate(np.asarray(times, float)):
+            for b in np.unique(band):
+                lev = np.flatnonzero(band == b)
+                self._grid_time(i, float(t0), lev, z_all[lev], np.asarray(xy_km, float), want[lev], out)
+        return out
+
+    def _grid_time(
+        self, i: int, t0: float, lev: IntArray, z: FloatArray, xy: FloatArray, want: Any, out: dict[str, FloatArray]
+    ) -> None:
+        """One time and one altitude band (levels ``lev``): one local system, factorised correlations."""
+        box = np.array([[xy[:, 0].min(), xy[:, 1].min(), z.min(), t0], [xy[:, 0].max(), xy[:, 1].max(), z.max(), t0]])
+        sel, obs, L, alpha, _ = self._tile_system(box, np.zeros((2, 2)))
+        if len(sel) == 0:
+            return
+        Xo = _coords(obs.X, obs.bg, self.p, t0)
+        kh, kz, kt = factor_correlations(xy, z, t0, Xo, self.p.lengths, self.p.kernel)
+        sf2 = self.p.sigma_field**2
+        for c, name in ((0, "du"), (1, "dv")):
+            w = sf2 * kt * alpha * obs.e[:, c]
+            out[name][i, lev] = (kz * w) @ kh.T
+        lv, hv = np.nonzero(want & ((kz.max(1)[:, None] * kh.max(1)[None, :]) * kt.max() > 1e-6))
+        for start in range(0, len(lv), _BLOCK):
+            li, hi = lv[start : start + _BLOCK], hv[start : start + _BLOCK]
+            k = sf2 * kh[hi] * kz[li] * kt
+            Vu = solve_triangular(L[0], (k * obs.e[None, :, 0]).T, lower=True, check_finite=False)
+            Vv = solve_triangular(L[0], (k * obs.e[None, :, 1]).T, lower=True, check_finite=False)
+            out["var_u"][i, lev[li], hi] = self.prior_var - (Vu**2).sum(0)
+            out["var_v"][i, lev[li], hi] = self.prior_var - (Vv**2).sum(0)
+            out["cov_uv"][i, lev[li], hi] = -(Vu * Vv).sum(0)
 
     # ---------------------------------------------------------------- leave-one-aircraft-out
     def loao(self, vectors: bool = False) -> pd.DataFrame:

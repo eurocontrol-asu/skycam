@@ -169,6 +169,8 @@ class ExportConfig(BaseModel):
 
     half_width_deg: float = 2.5
     horizontal_refine: int = 2
+    variance_stride_h: int = 2
+    variance_stride_level: int = 2
     level_step_hpa: float = 5.0
     min_level_hpa: float = 150.0
     max_level_hpa: float = 400.0

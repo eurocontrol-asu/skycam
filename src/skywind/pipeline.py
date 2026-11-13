@@ -193,7 +193,8 @@ def export_step(
     era = field.era5.ds
     grid = export_grid(era, settings.site, settings.export, start, stop)
     on_grid = era5_on_grid(era, grid)
-    residual = residual_dataset(on_grid, field.estimator, settings.site)
+    ex = settings.export
+    residual = residual_dataset(on_grid, field.estimator, settings.site, ex.variance_stride_h, ex.variance_stride_level)
     meta = {"day": day, "estimator": field.estimator.name, "skywind_version": __version__, **(attrs or {})}
     ds = to_met_dataset(on_grid, residual, meta)
     return write_netcdf(ds, out or settings.paths.fields(day))

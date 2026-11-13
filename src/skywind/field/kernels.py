@@ -13,7 +13,7 @@ import numpy as np
 
 from skywind.geo import FloatArray
 
-__all__ = ["Kernel", "Lengths", "correlation", "correlation_and_grads", "flow_coordinates"]
+__all__ = ["Kernel", "Lengths", "correlation", "correlation_and_grads", "factor_correlations", "flow_coordinates"]
 
 type Kernel = Literal["gaussian", "matern32"]
 type Lengths = tuple[float, float, float]
@@ -51,8 +51,22 @@ def correlation(XA: FloatArray, XB: FloatArray, lengths: Lengths, kernel: Kernel
     """Correlation matrix (len(XA), len(XB)); lengths = (km, m, min)."""
     d = _scaled(XA, XB, lengths)
     if kernel == "gaussian":
-        return np.exp(-0.5 * (d[0] + d[1] + d[2]))
-    return _matern(d[0]) * _matern(d[1]) * _matern(d[2])
+        s = d[0]
+        s += d[1]
+        s += d[2]
+        s *= -0.5
+        return np.exp(s, out=s)
+    # Matern 3/2 product: prod (1 + r_i) * exp(-sum r_i), with r_i = sqrt(3) |d_i| / l_i (one exponential)
+    r = [np.sqrt(x, out=x) for x in d]
+    for x in r:
+        x *= _SQ3
+    total = r[0] + r[1]
+    total += r[2]
+    k = np.exp(-total)
+    for x in r:
+        x += 1.0
+        k *= x
+    return k
 
 
 def correlation_and_grads(
@@ -67,3 +81,23 @@ def correlation_and_grads(
     grads = [_matern_dlog(x) for x in d]
     k = parts[0] * parts[1] * parts[2]
     return k, [grads[0] * parts[1] * parts[2], parts[0] * grads[1] * parts[2], parts[0] * parts[1] * grads[2]]
+
+
+def _profile(d2: FloatArray, kernel: Kernel) -> FloatArray:
+    """1-D correlation from a squared scaled distance."""
+    if kernel == "gaussian":
+        return np.exp(-0.5 * d2)
+    r = _SQ3 * np.sqrt(d2)
+    return np.asarray((1 + r) * np.exp(-r), dtype=np.float64)
+
+
+def factor_correlations(
+    xy: FloatArray, z: FloatArray, t: float, XB: FloatArray, lengths: Lengths, kernel: Kernel = "gaussian"
+) -> tuple[FloatArray, FloatArray, FloatArray]:
+    """Factors of the separable correlation between a grid (horizontal nodes ``xy`` (h, 2) km x altitudes ``z`` (l,)
+    m, at one time ``t``) and points ``XB``: k[(z_l, xy_h), j] = kh[h, j] * kz[l, j] * kt[j]."""
+    lh, lz, lt = lengths
+    dh2 = ((xy[:, None, 0] - XB[None, :, 0]) ** 2 + (xy[:, None, 1] - XB[None, :, 1]) ** 2) / lh**2
+    dz2 = (z[:, None] - XB[None, :, 2]) ** 2 / lz**2
+    dt2 = (t - XB[:, 3]) ** 2 / (lt * 60.0) ** 2
+    return _profile(dh2, kernel), _profile(dz2, kernel), _profile(dt2, kernel)
