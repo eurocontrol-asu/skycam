@@ -228,6 +228,13 @@ def _normal_std(ds: xr.Dataset, adv: pd.DataFrame, truth: ContrailTruth) -> pd.D
     return m.groupby("flight", as_index=False).agg(std_normal=("std_normal", "mean"))
 
 
+def _save_frames(adv: pd.DataFrame, truth: ContrailTruth, path: Path) -> None:
+    """Advected positions of the scored flights at the annotated frame times (for figures and overlays)."""
+    keep = adv["flight_id"].isin(set(truth.centres["flight_id"])) & adv["time"].isin(set(truth.centres["time"]))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    adv[keep].to_parquet(path, index=False)
+
+
 def _contrail_day(
     settings: Settings, truth: ContrailTruth, fields: Mapping[str, ResidualEstimator], out: Path, era: Era5
 ) -> dict[str, Any]:
@@ -250,8 +257,10 @@ def _contrail_day(
         if "era5" not in errors:
             adv = advect_step(s, path, truth.emissions, stop, winds="era5", max_age_min=45)
             errors["era5"] = cross_track_errors(truth, adv, s.site)
+            _save_frames(adv, truth, out / "advected" / f"era5_{truth.day}.parquet")
         adv = advect_step(s, path, truth.emissions, stop, winds="corrected", max_age_min=45)
         errors[name] = cross_track_errors(truth, adv, s.site)
+        _save_frames(adv, truth, out / "advected" / f"{name}_{truth.day}.parquet")
         stds[name] = _normal_std(xr.open_dataset(path), adv, truth).assign(day=truth.day)
     return {"errors": errors, "stds": stds}
 
