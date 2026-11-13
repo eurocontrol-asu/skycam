@@ -223,6 +223,18 @@ def diagnostics(params: Path | None = None, days: Days = None, config: Config = 
 
 
 @evaluate_app.command
+def merge_contrails(*run: Path, config: Config = None) -> None:
+    """Summarise several evaluation B runs (days run in parallel) into one new run directory."""
+    from skywind.evaluate.runner import merge_contrail_runs
+    from skywind.runs import new_run_dir
+
+    s = _settings(config)
+    out = new_run_dir(s.paths.runs, "eval-contrails-merged", f"evaluation B, merge of {', '.join(map(str, run))}")
+    merge_contrail_runs(list(run), out)
+    _print({"run": str(out)})
+
+
+@evaluate_app.command
 def report(aircraft_run: Path | None = None, contrail_run: Path | None = None) -> None:
     """Markdown tables of an evaluation A and / or B run directory."""
     from skywind.evaluate.report import aircraft_report, contrail_report

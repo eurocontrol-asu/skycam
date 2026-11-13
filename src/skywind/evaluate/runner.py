@@ -35,7 +35,16 @@ from skywind.windfield import CorrectedWind, ResidualEstimator
 
 log = logging.getLogger(__name__)
 
-__all__ = ["VARIANTS", "Variant", "run_aircraft", "run_calibration", "run_contrails", "run_diagnostics", "run_ridge"]
+__all__ = [
+    "VARIANTS",
+    "Variant",
+    "merge_contrail_runs",
+    "run_aircraft",
+    "run_calibration",
+    "run_contrails",
+    "run_diagnostics",
+    "run_ridge",
+]
 
 
 @dataclass(frozen=True)
@@ -291,6 +300,8 @@ def summarise_contrails(
     out.mkdir(parents=True, exist_ok=True)
     for k, e in errors.items():
         e.to_parquet(out / f"errors_{k}.parquet", index=False)
+    for k, sd in stds.items():
+        sd.to_parquet(out / f"stds_{k}.parquet", index=False)
     paired.to_csv(out / "flights_paired.csv", index=False)
     drifts.to_csv(out / "drift_summary.csv", index=False)
     ages.to_csv(out / "age_summary.csv", index=False)
@@ -336,3 +347,17 @@ def lodo_estimators(
         return out
 
     return build
+
+
+def merge_contrail_runs(runs: Sequence[Path], out: Path) -> dict[str, pd.DataFrame]:
+    """Summarise several evaluation B runs (e.g. days run in parallel) as one."""
+    errors: dict[str, list[pd.DataFrame]] = {}
+    stds: dict[str, list[pd.DataFrame]] = {}
+    for run in runs:
+        for f in run.glob("errors_*.parquet"):
+            errors.setdefault(f.stem.removeprefix("errors_"), []).append(pd.read_parquet(f))
+        for f in run.glob("stds_*.parquet"):
+            stds.setdefault(f.stem.removeprefix("stds_"), []).append(pd.read_parquet(f))
+    return summarise_contrails(
+        {k: pd.concat(v) for k, v in errors.items()}, {k: pd.concat(v) for k, v in stds.items()}, out
+    )
