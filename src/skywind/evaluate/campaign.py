@@ -36,7 +36,7 @@ def _ensure_calibration(settings: Settings, days: list[str]) -> None:
 
 def aircraft_campaign(settings: Settings, variants: list[str], days: list[str] | None = None, ridge: bool = True,
                       diagnostics: bool = True, transfer: bool = True) -> dict[str, Any]:
-    days = days or available_days(settings.paths)
+    days = days or available_days(settings.paths, "dev")  # holdout days are never used for tuning
     unknown = [v for v in variants if v not in VARIANTS]
     if unknown:
         raise ValueError(f"unknown variants {unknown}; known: {sorted(VARIANTS)}")

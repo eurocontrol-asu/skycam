@@ -37,13 +37,13 @@ def _fail(exc: Exception) -> None:
 
 
 @app.command
-def days(config: Config = None) -> None:
-    """List the days available in the input store with their windows."""
+def days(set_name: str | None = None, config: Config = None) -> None:
+    """List the days available in the input store with their windows and set (dev / holdout)."""
     from skywind.days import available_days
 
     s = _settings(config)
-    _print([{"day": d, "windows": [(str(a), str(b)) for a, b in day_info(s.paths, d).windows]}
-            for d in available_days(s.paths)])
+    infos = [day_info(s.paths, d) for d in available_days(s.paths, set_name)]
+    _print([{"day": i.day, "set": i.set, "windows": [(str(a), str(b)) for a, b in i.windows]} for i in infos])
 
 
 @app.command
@@ -59,7 +59,7 @@ def acquire(day: str, windows: str, overwrite: bool = False, config: Config = No
                           TrinoCommB(s.paths.cache / "opensky_query_cache"), overwrite)
     except Exception as exc:
         _fail(exc)
-    rep["registered"] = register_day(s, d, windows)
+    rep["registered"] = register_day(s, d, parse_windows(d, windows))
     _print(rep)
 
 
@@ -171,3 +171,7 @@ def contrails(aircraft_run: Path, *variant: str, days: Days = None, config: Conf
 
 def main() -> None:
     app()
+
+
+if __name__ == "__main__":
+    main()

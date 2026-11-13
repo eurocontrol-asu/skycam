@@ -49,6 +49,15 @@ class DayInfo:
         return max(w[1] for w in self.windows)
 
 
+def _row_windows(day: str, r: pd.Series) -> tuple[tuple[pd.Timestamp, pd.Timestamp], ...]:
+    """Windows from a ``windows`` column ('HH:MM-HH:MM;...') or from ``commb_start`` / ``commb_stop`` timestamps."""
+    if "windows" in r and isinstance(r["windows"], str) and r["windows"]:
+        return tuple(parse_windows(day, r["windows"]))
+    if "commb_start" in r and isinstance(r["commb_start"], str):
+        return ((pd.Timestamp(r["commb_start"]), pd.Timestamp(r["commb_stop"])),)
+    raise ValueError(f"days.csv row of {day} has neither 'windows' nor 'commb_start'/'commb_stop'")
+
+
 def _from_csv(path: Path) -> dict[str, DayInfo]:
     if not path.is_file():
         return {}
@@ -56,7 +65,7 @@ def _from_csv(path: Path) -> dict[str, DayInfo]:
     out = {}
     for _, r in table.iterrows():
         day = parse_day(str(r["day"]))
-        out[day] = DayInfo(day, tuple(parse_windows(day, str(r["windows"]))), str(r.get("set", "dev") or "dev"))
+        out[day] = DayInfo(day, _row_windows(day, r), str(r.get("set", "dev") or "dev"))
     return out
 
 
@@ -76,7 +85,12 @@ def day_info(paths: Paths, day: str) -> DayInfo:
     return info
 
 
-def available_days(paths: Paths) -> list[str]:
-    """Days with Comm-B, state vectors and ERA5 in the input store."""
+def available_days(paths: Paths, set_name: str | None = None) -> list[str]:
+    """Days with Comm-B, state vectors and ERA5 in the input store; optionally only those of a ``days.csv`` set
+    (``dev`` / ``holdout``; days absent from ``days.csv`` count as ``dev``)."""
     days = {p.stem.removeprefix("commb_") for p in (paths.inputs / "commb").glob("commb_*.parquet")}
-    return sorted(d for d in days if paths.opensky(d).is_file() and paths.era5(d).is_file())
+    ok = sorted(d for d in days if paths.opensky(d).is_file() and paths.era5(d).is_file())
+    if set_name is None:
+        return ok
+    listed = _from_csv(paths.days_csv())
+    return [d for d in ok if (listed[d].set if d in listed else "dev") == set_name]

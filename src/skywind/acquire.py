@@ -43,15 +43,20 @@ def _fetch_file(source: FileSource, day: str, dest: Path, overwrite: bool) -> st
     return "fetched"
 
 
-def register_day(settings: Settings, day: str, windows: str, set_name: str = "dev") -> bool:
-    """Append the day to ``days.csv`` unless it is already listed. Returns True if a row was added."""
+def register_day(settings: Settings, day: str, windows: list[tuple[pd.Timestamp, pd.Timestamp]],
+                 set_name: str = "dev") -> bool:
+    """Append the day to ``days.csv`` (keeping its existing columns) unless already listed. True if a row was added."""
     path = settings.paths.days_csv()
+    row = {"day": day, "commb_start": min(w[0] for w in windows).strftime("%Y-%m-%dT%H:%M:%SZ"),
+           "commb_stop": max(w[1] for w in windows).strftime("%Y-%m-%dT%H:%M:%SZ"), "set": set_name,
+           "notes": "registered by skywind acquire"}
+    columns = list(row)
     if path.is_file():
         table = pd.read_csv(path, dtype=str)
         if (table["day"].str.replace("-", "") == day).any():
             return False
-    row = pd.DataFrame([{"day": day, "windows": windows, "set": set_name}])
-    row.to_csv(path, mode="a", header=not path.is_file(), index=False)
+        columns = list(table.columns)
+    pd.DataFrame([row]).reindex(columns=columns).to_csv(path, mode="a", header=not path.is_file(), index=False)
     return True
 
 

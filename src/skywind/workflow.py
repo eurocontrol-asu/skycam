@@ -33,7 +33,7 @@ def _acquire(settings: Settings, day: str, windows: str) -> dict[str, Any]:
 
     rep = acquire_day(settings, day, parse_windows(day, windows), default_file_sources(settings),
                       TrinoCommB(settings.paths.cache / "opensky_query_cache"))
-    rep["registered"] = register_day(settings, day, windows)
+    rep["registered"] = register_day(settings, day, parse_windows(day, windows))
     return rep
 
 
