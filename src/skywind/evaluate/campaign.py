@@ -80,7 +80,13 @@ def contrail_campaign(
         f"on {', '.join(days)}; variants {', '.join(variants)}; "
         f"hyperparameters from {', '.join(map(str, aircraft_runs))}",
     )
-    res = run_contrails(settings, source, lodo_estimators(settings, aircraft_runs, variants), out, days)
+    res = run_contrails(
+        settings,
+        source,
+        lodo_estimators(settings, aircraft_runs, [v for v in variants if v != "ridge"], "ridge" in variants),
+        out,
+        days,
+    )
     pooled = res["drifts"][res["drifts"]["day"] == "pooled"]
     return {"run": str(out), "pooled_drift": pooled.to_dict("records")}
 
