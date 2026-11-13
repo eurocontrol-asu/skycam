@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -25,8 +26,9 @@ class Points:
     bg: FloatArray
 
     @classmethod
-    def from_geo(cls, site: Site, t: object, p_hpa: object, lat: object, lon: object,
-                 bg: FloatArray | None = None) -> Points:
+    def from_geo(
+        cls, site: Site, t: object, p_hpa: object, lat: object, lon: object, bg: FloatArray | None = None
+    ) -> Points:
         x, y = local_xy_km(lat, lon, site.lat, site.lon)
         z = isa_altitude_m(np.asarray(p_hpa, float) * 100)
         tt = np.broadcast_to(np.asarray(t, float), x.shape)
@@ -47,8 +49,8 @@ class ObsSet:
     kind: IntArray
     aircraft: IntArray
     bg: FloatArray
-    day: npt.NDArray[np.str_]
-    icao24: npt.NDArray[np.str_]
+    day: npt.NDArray[Any]
+    icao24: npt.NDArray[Any]
 
     def __len__(self) -> int:
         return len(self.y)
@@ -59,8 +61,17 @@ class ObsSet:
         return self.aircraft * 2 + self.kind
 
     def subset(self, mask: npt.NDArray[np.bool_] | IntArray) -> ObsSet:
-        return replace(self, X=self.X[mask], e=self.e[mask], y=self.y[mask], kind=self.kind[mask],
-                       aircraft=self.aircraft[mask], bg=self.bg[mask], day=self.day[mask], icao24=self.icao24[mask])
+        return replace(
+            self,
+            X=self.X[mask],
+            e=self.e[mask],
+            y=self.y[mask],
+            kind=self.kind[mask],
+            aircraft=self.aircraft[mask],
+            bg=self.bg[mask],
+            day=self.day[mask],
+            icao24=self.icao24[mask],
+        )
 
     @classmethod
     def from_frame(cls, w: pd.DataFrame, site: Site, use_cross: bool = False) -> ObsSet:
@@ -72,18 +83,31 @@ class ObsSet:
         ac_codes = pd.factorize(w["day"].astype(str) + ":" + w["icao24"].astype(str))[0].astype(np.int64)
         bg = np.stack([w["u_era"].to_numpy(float), w["v_era"].to_numpy(float)], 1)
         day, icao = w["day"].astype(str).to_numpy(), w["icao24"].astype(str).to_numpy()
-        along = cls(X, np.stack([hx, hy], 1), w["d_along"].to_numpy(float), np.zeros(len(w), np.int64), ac_codes, bg,
-                    day, icao)
+        along = cls(
+            X, np.stack([hx, hy], 1), w["d_along"].to_numpy(float), np.zeros(len(w), np.int64), ac_codes, bg, day, icao
+        )
         if not use_cross:
             return along
         ok = np.isfinite(w["hdg_offset"].to_numpy(float)) & np.isfinite(w["d_right"].to_numpy(float))
-        cross = cls(X[ok], np.stack([qx, qy], 1)[ok], w["d_right"].to_numpy(float)[ok], np.ones(int(ok.sum()), np.int64),
-                    ac_codes[ok], bg[ok], day[ok], icao[ok])
+        cross = cls(
+            X[ok],
+            np.stack([qx, qy], 1)[ok],
+            w["d_right"].to_numpy(float)[ok],
+            np.ones(int(ok.sum()), np.int64),
+            ac_codes[ok],
+            bg[ok],
+            day[ok],
+            icao[ok],
+        )
         return along.concat(cross)
 
     def concat(self, other: ObsSet) -> ObsSet:
-        return ObsSet(*(np.concatenate([getattr(self, f), getattr(other, f)]) for f in
-                        ("X", "e", "y", "kind", "aircraft", "bg", "day", "icao24")))
+        return ObsSet(
+            *(
+                np.concatenate([getattr(self, f), getattr(other, f)])
+                for f in ("X", "e", "y", "kind", "aircraft", "bg", "day", "icao24")
+            )
+        )
 
 
 @dataclass(frozen=True)

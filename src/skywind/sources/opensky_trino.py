@@ -28,9 +28,9 @@ def _trino(cache_dir: Path) -> Any:
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise SourceError("pyopensky is not installed: uv sync --extra opensky") from exc
     cache_dir.mkdir(parents=True, exist_ok=True)
-    trino_module.cache_path = cache_dir
+    setattr(trino_module, "cache_path", cache_dir)  # noqa: B010 - module attribute not exported by the stubs
 
-    class AuthenticatedTrino(Trino):  # type: ignore[misc]
+    class AuthenticatedTrino(Trino):
         def token(self, **kwargs: Any) -> Any:
             try:
                 result = super().token(timeout=30, **kwargs)
@@ -49,20 +49,30 @@ class TrinoCommB:
     def __init__(self, cache_dir: Path) -> None:
         self.cache_dir = cache_dir
 
-    def fetch(self, start: pd.Timestamp, stop: pd.Timestamp, icao24: list[str]) -> tuple[pd.DataFrame, dict[str, object]]:
+    def fetch(
+        self, start: pd.Timestamp, stop: pd.Timestamp, icao24: list[str]
+    ) -> tuple[pd.DataFrame, dict[str, object]]:
         from pyopensky.schema import RollcallRepliesData4
         from sqlalchemy import literal_column
 
         api = _trino(self.cache_dir)
-        serials = literal_column("array_join(transform(sensors, s -> cast(s.serial as varchar)), ' ')").label("serials")
+        serials: Any = literal_column("array_join(transform(sensors, s -> cast(s.serial as varchar)), ' ')").label(
+            "serials"
+        )
         frames, chunks = [], []
         for h0 in pd.date_range(start.floor("1h"), stop, freq="1h"):
             a, b = max(h0, start), min(h0 + pd.Timedelta(hours=1), stop)
             if a >= b:
                 continue
             tic = time.time()
-            df = api.rawdata(a, b, RollcallRepliesData4.rawmsg.like("a%"), icao24=icao24, Table=RollcallRepliesData4,
-                             extra_columns=(serials,))
+            df = api.rawdata(
+                a,
+                b,
+                RollcallRepliesData4.rawmsg.like("a%"),
+                icao24=icao24,
+                Table=RollcallRepliesData4,
+                extra_columns=(serials,),
+            )
             n = 0 if df is None else len(df)
             chunks.append({"start": str(a), "stop": str(b), "rows": n, "seconds": round(time.time() - tic, 1)})
             if n:

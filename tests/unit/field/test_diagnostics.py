@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+
 from skywind.field.diagnostics import fit_correlation_length, hollingsworth_lonnberg
 from tests.unit.field.test_gp import tracks
 

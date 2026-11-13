@@ -13,9 +13,18 @@ def _obs(offset_deg: float, n: int = 40) -> pd.DataFrame:
     tas, u, v = 230.0, 20.0, -5.0
     ax, ay = tas * np.sin(np.radians(hdg_true)), tas * np.cos(np.radians(hdg_true))
     gx, gy = ax + u, ay + v
-    return pd.DataFrame({"icao24": "abc", "typecode": "A320", "trk": np.degrees(np.arctan2(gx, gy)) % 360,
-                         "gs": np.hypot(gx, gy) / 0.514444, "hdg_mag": (hdg_true - offset_deg - 1.0) % 360,
-                         "decl": 1.0, "u": u, "v": v})
+    return pd.DataFrame(
+        {
+            "icao24": "abc",
+            "typecode": "A320",
+            "trk": np.degrees(np.arctan2(gx, gy)) % 360,
+            "gs": np.hypot(gx, gy) / 0.514444,
+            "hdg_mag": (hdg_true - offset_deg - 1.0) % 360,
+            "decl": 1.0,
+            "u": u,
+            "v": v,
+        }
+    )
 
 
 def test_offset_recovered_with_exact_reference_wind() -> None:

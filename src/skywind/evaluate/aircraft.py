@@ -33,8 +33,16 @@ def loao_frame(est: _Loao, obs: ObsSet, mean_bias: float) -> pd.DataFrame:
     """LOAO predictions joined with the observations: day, icao24, y, pred, var_field, var_total, z."""
     t = est.loao()
     i = t["obs_index"].to_numpy(int)
-    out = pd.DataFrame({"day": obs.day[i], "icao24": obs.icao24[i], "y": obs.y[i], "pred": t["pred"].to_numpy(float),
-                        "var_field": t["var_field"].to_numpy(float), "var_total": t["var_total"].to_numpy(float)})
+    out = pd.DataFrame(
+        {
+            "day": obs.day[i],
+            "icao24": obs.icao24[i],
+            "y": obs.y[i],
+            "pred": t["pred"].to_numpy(float),
+            "var_field": t["var_field"].to_numpy(float),
+            "var_total": t["var_total"].to_numpy(float),
+        }
+    )
     out["z"] = (out["y"] - mean_bias - out["pred"]) / np.sqrt(out["var_total"])
     return out
 
@@ -42,10 +50,18 @@ def loao_frame(est: _Loao, obs: ObsSet, mean_bias: float) -> pd.DataFrame:
 def _scores(d: pd.DataFrame) -> dict[str, float]:
     mse0, mse1 = float((d["y"] ** 2).mean()), float(((d["y"] - d["pred"]) ** 2).mean())
     z = d["z"].to_numpy(float)
-    return {"n_obs": float(len(d)), "n_aircraft": float(d["icao24"].nunique()), "rmse_era5": np.sqrt(mse0),
-            "rmse_field": np.sqrt(mse1), "skill": 1 - mse1 / mse0, "z_mean": float(z.mean()), "z_sd": float(z.std()),
-            "cover68": float((np.abs(z) <= 1).mean()), "cover95": float((np.abs(z) <= 1.96).mean()),
-            "sd_field_median": float(np.sqrt(d["var_field"]).median())}
+    return {
+        "n_obs": float(len(d)),
+        "n_aircraft": float(d["icao24"].nunique()),
+        "rmse_era5": np.sqrt(mse0),
+        "rmse_field": np.sqrt(mse1),
+        "skill": 1 - mse1 / mse0,
+        "z_mean": float(z.mean()),
+        "z_sd": float(z.std()),
+        "cover68": float((np.abs(z) <= 1).mean()),
+        "cover95": float((np.abs(z) <= 1.96).mean()),
+        "sd_field_median": float(np.sqrt(d["var_field"]).median()),
+    }
 
 
 def score_predictions(pred: pd.DataFrame) -> pd.DataFrame:
@@ -55,9 +71,13 @@ def score_predictions(pred: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def lodo_gp(days: Sequence[str], obs_provider: Callable[[str], Mapping[str, ObsSet]], base: GPParams,
-            fit_kwargs: dict[str, Any] | None = None, est_kwargs: dict[str, Any] | None = None
-            ) -> tuple[pd.DataFrame, pd.DataFrame]:
+def lodo_gp(
+    days: Sequence[str],
+    obs_provider: Callable[[str], Mapping[str, ObsSet]],
+    base: GPParams,
+    fit_kwargs: dict[str, Any] | None = None,
+    est_kwargs: dict[str, Any] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """GP hyperparameters fitted (marginal likelihood) on all days but one, LOAO on the held-out day.
 
     ``obs_provider(held_out)`` returns the observation sets of every day for that fold (so that a calibration table can
@@ -73,17 +93,27 @@ def lodo_gp(days: Sequence[str], obs_provider: Callable[[str], Mapping[str, ObsS
     return pd.concat(preds, ignore_index=True), pd.DataFrame(fits)
 
 
-def ridge_grid_tables(obs_by_day: Mapping[str, ObsSet], base: RidgeConfig,
-                      grid: dict[str, Sequence[float]] | None = None, workers: int = 1) -> pd.DataFrame:
+def ridge_grid_tables(
+    obs_by_day: Mapping[str, ObsSet],
+    base: RidgeConfig,
+    grid: dict[str, Sequence[float]] | None = None,
+    workers: int = 1,
+) -> pd.DataFrame:
     """LOAO squared-error sums of every grid combination, per day (computed once, reused by every fold)."""
     days = list(obs_by_day)
     with ProcessPoolExecutor(max_workers=max(1, min(workers, len(days)))) as pool:
         tables = list(pool.map(fit_ridge, [[obs_by_day[d]] for d in days], [base] * len(days), [grid] * len(days)))
-    return pd.concat([t.assign(day=d, sse=t["mse"] * t["n"]) for d, t in zip(days, tables, strict=False)], ignore_index=True)
+    return pd.concat(
+        [t.assign(day=d, sse=t["mse"] * t["n"]) for d, t in zip(days, tables, strict=False)], ignore_index=True
+    )
 
 
-def lodo_ridge(obs_by_day: Mapping[str, ObsSet], base: RidgeConfig, grid: dict[str, Sequence[float]] | None = None,
-               workers: int = 1) -> tuple[pd.DataFrame, pd.DataFrame]:
+def lodo_ridge(
+    obs_by_day: Mapping[str, ObsSet],
+    base: RidgeConfig,
+    grid: dict[str, Sequence[float]] | None = None,
+    workers: int = 1,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Ridge kernel and prior chosen by pooled LOAO error on all days but one, LOAO on the held-out day."""
     table = ridge_grid_tables(obs_by_day, base, grid, workers)
     keys = [k for k in table.columns if k in RidgeConfig.model_fields]

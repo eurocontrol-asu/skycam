@@ -10,9 +10,17 @@ from tests.unit.field.test_gp import PARAMS, tracks
 
 
 def test_scores_skill_and_calibration() -> None:
-    pred = pd.DataFrame({"day": ["a"] * 4, "icao24": ["x", "x", "y", "y"], "y": [1.0, -1.0, 2.0, -2.0],
-                         "pred": [0.5, -0.5, 1.0, -1.0], "var_field": 1.0, "var_total": 1.0,
-                         "z": [0.5, -0.5, 1.0, -1.0]})
+    pred = pd.DataFrame(
+        {
+            "day": ["a"] * 4,
+            "icao24": ["x", "x", "y", "y"],
+            "y": [1.0, -1.0, 2.0, -2.0],
+            "pred": [0.5, -0.5, 1.0, -1.0],
+            "var_field": 1.0,
+            "var_total": 1.0,
+            "z": [0.5, -0.5, 1.0, -1.0],
+        }
+    )
     s = score_predictions(pred).set_index("day")
     assert s.loc["pooled", "skill"] == pytest.approx(0.75)
     assert s.loc["a", "cover68"] == 1.0

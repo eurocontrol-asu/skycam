@@ -23,8 +23,7 @@ import pandas as pd
 from skywind.config import Site
 from skywind.geo import local_xy_km
 
-__all__ = ["AGE_BINS", "ContrailTruth", "TruthSource", "age_table", "cross_track_errors", "drift_table",
-           "flight_fits"]
+__all__ = ["AGE_BINS", "ContrailTruth", "TruthSource", "age_table", "cross_track_errors", "drift_table", "flight_fits"]
 
 AGE_BINS = (0.5, 5.0, 10.0, 20.0, 40.0)
 
@@ -51,8 +50,11 @@ class TruthSource(Protocol):
 
 def cross_track_errors(truth: ContrailTruth, advected: pd.DataFrame, site: Site) -> pd.DataFrame:
     """Signed cross-track error (m) of every annotated (point, frame) found in ``advected``."""
-    m = truth.centres.merge(advected[["flight_id", "waypoint", "time", "latitude", "longitude"]],
-                            on=["flight_id", "waypoint", "time"], how="inner")
+    m = truth.centres.merge(
+        advected[["flight_id", "waypoint", "time", "latitude", "longitude"]],
+        on=["flight_id", "waypoint", "time"],
+        how="inner",
+    )
     cx, cy = local_xy_km(m["centre_lat"], m["centre_lon"], site.lat, site.lon)
     px, py = local_xy_km(m["latitude"], m["longitude"], site.lat, site.lon)
     m["error_m"] = 1000 * ((cx - px) * m["normal_e"] + (cy - py) * m["normal_n"])
@@ -95,7 +97,8 @@ def drift_table(fits: Mapping[str, pd.DataFrame], ref: str = "era5") -> tuple[pd
         part = f.rename(columns={"offset_m": f"offset_{m}", "drift_m_per_min": f"drift_{m}"})
         part = part[["day", "flight", f"offset_{m}", f"drift_{m}"]]
         paired = part if paired is None else paired.merge(part, on=["day", "flight"])
-    assert paired is not None
+    if paired is None:
+        raise ValueError("no method to compare")
     paired = paired.dropna()
     rows = [{"day": day, **_drift_summary(g, methods, ref)} for day, g in paired.groupby("day")]
     rows.append({"day": "pooled", **_drift_summary(paired, methods, ref)})
@@ -108,10 +111,23 @@ def age_table(errors: Mapping[str, pd.DataFrame], fits: Mapping[str, pd.DataFram
     for m, e in errors.items():
         f = fits[m][["day", "flight", "offset_m"]]
         e = e.merge(f, on=["day", "flight"], how="inner").dropna(subset=["offset_m"])
-        e = e.assign(bin=pd.cut(e["age_min"], list(AGE_BINS)), raw=e["error_m"].abs(),
-                     drift_only=(e["error_m"] - e["offset_m"]).abs())
+        e = e.assign(
+            bin=pd.cut(e["age_min"], list(AGE_BINS)),
+            raw=e["error_m"].abs(),
+            drift_only=(e["error_m"] - e["offset_m"]).abs(),
+        )
         for (day, b), g in pd.concat([e, e.assign(day="pooled")]).groupby(["day", "bin"], observed=True):
-            rows.append({"method": m, "day": day, "age_bin": str(b), "n_points": len(g),
-                         "n_flights": g["flight"].nunique(), "abs_med": g["raw"].median(), "abs_p90": g["raw"].quantile(0.9),
-                         "drift_only_med": g["drift_only"].median(), "drift_only_p90": g["drift_only"].quantile(0.9)})
+            rows.append(
+                {
+                    "method": m,
+                    "day": day,
+                    "age_bin": str(b),
+                    "n_points": len(g),
+                    "n_flights": g["flight"].nunique(),
+                    "abs_med": g["raw"].median(),
+                    "abs_p90": g["raw"].quantile(0.9),
+                    "drift_only_med": g["drift_only"].median(),
+                    "drift_only_p90": g["drift_only"].quantile(0.9),
+                }
+            )
     return pd.DataFrame(rows)

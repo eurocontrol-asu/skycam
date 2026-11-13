@@ -6,15 +6,16 @@ Artefacts used (read-only), under ``<prototype_dir>/calib``:
   ``segments/<day>_<flight>.npz``       per point and frame: presence, centre (ribbon pixel, 25 m, row 160 = ribbon
                                          axis, decreasing to the right of track), interior gaps, age;
   ``flights/advected_<day>_dz777.parquet`` the path the ribbon was drawn on (axis positions per waypoint and frame).
-The annotated centre is placed back on the ground: axis position + offset x right-of-track normal of the axis (tangent over
-+-500 m of emission arc length, as when the ribbons were built). Emission positions come from the input store (sanitised
-state vectors), never from the annotations.
+The annotated centre is placed back on the ground: axis position + offset x right-of-track normal of the axis
+(tangent over +-500 m of emission arc length, as when the ribbons were built). Emission positions come from the input
+store (sanitised state vectors), never from the annotations.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -54,7 +55,7 @@ class CalibArtefacts:
     def days(self) -> list[str]:
         return sorted({p.name[:8] for p in (self.root / "segments").glob("*.npz")})
 
-    def _flights(self, day: str) -> list[tuple[dict[str, object], Path]]:
+    def _flights(self, day: str) -> list[tuple[dict[str, Any], Path]]:
         out = []
         for meta_path in sorted((self.root / "dataset" / "meta").glob(f"{day}_*.json")):
             seg = self.root / "segments" / meta_path.with_suffix(".npz").name
@@ -63,16 +64,27 @@ class CalibArtefacts:
                 out.append((meta, seg))
         return out
 
-    def _emissions(self, day: str, metas: list[dict[str, object]]) -> pd.DataFrame:
+    def _emissions(self, day: str, metas: list[dict[str, Any]]) -> pd.DataFrame:
         from pycontrails.physics import units
 
-        pts = pd.DataFrame([{"flight": m["flight"], "flight_id": m["os_flight"], "waypoint": p["waypoint"],
-                             "emission_time": pd.Timestamp(p["emission"], tz="UTC")}
-                            for m in metas for p in m["points"]])  # type: ignore[attr-defined]
+        pts = pd.DataFrame(
+            [
+                {
+                    "flight": m["flight"],
+                    "flight_id": m["os_flight"],
+                    "waypoint": p["waypoint"],
+                    "emission_time": pd.Timestamp(p["emission"], tz="UTC"),
+                }
+                for m in metas
+                for p in m["points"]
+            ]
+        )
         pts["emission_time"] = pd.to_datetime(pts["emission_time"], utc=True).dt.as_unit("ns")
         sv, _ = state_vectors(self.settings, day)
         sv = sv[sv["flight_id"].isin(set(pts["flight_id"]))]
-        sv = sv[["flight_id", "timestamp", "latitude", "longitude", "altitude"]].rename(columns={"timestamp": "emission_time"})
+        sv = sv[["flight_id", "timestamp", "latitude", "longitude", "altitude"]].rename(
+            columns={"timestamp": "emission_time"}
+        )
         sv["flight_id"] = sv["flight_id"].astype(str)
         sv["emission_time"] = pd.to_datetime(sv["emission_time"], utc=True).dt.as_unit("ns")
         e = pts.merge(sv, on=["flight_id", "emission_time"], how="inner")
@@ -94,16 +106,23 @@ class CalibArtefacts:
         centres = pd.concat([f for f in frames if len(f)], ignore_index=True)
         return ContrailTruth(day, emissions, centres)
 
-    def _centres(self, day: str, meta: dict[str, object], seg: Path, emissions: pd.DataFrame,
-                 axis: pd.DataFrame) -> pd.DataFrame:
+    def _centres(
+        self, day: str, meta: dict[str, Any], seg: Path, emissions: pd.DataFrame, axis: pd.DataFrame
+    ) -> pd.DataFrame:
         z = np.load(seg)
-        pts = sorted(meta["points"], key=lambda p: p["row"])  # type: ignore[arg-type, call-overload, index]
+        pts = sorted(meta["points"], key=lambda p: p["row"])
         waypoints = np.array([p["waypoint"] for p in pts])
         times = pd.to_datetime([day + f for f in z["frames"]], format="%Y%m%d%H%M%S").tz_localize("UTC").as_unit("ns")
         ok = z["present"] & ~z["gap"] & np.isfinite(z["centre"])
         k, t = np.nonzero(ok)
-        obs = pd.DataFrame({"waypoint": waypoints[k], "time": times[t], "age_min": z["age"][k, t].astype(float),
-                            "offset_m": (_AXIS_ROW - z["centre"][k, t].astype(float)) * _RES_M})
+        obs = pd.DataFrame(
+            {
+                "waypoint": waypoints[k],
+                "time": times[t],
+                "age_min": z["age"][k, t].astype(float),
+                "offset_m": (_AXIS_ROW - z["centre"][k, t].astype(float)) * _RES_M,
+            }
+        )
         e = emissions[emissions["flight"] == meta["flight"]]
         lat0 = self.settings.site.lat
         ex, ey = _metres(e["latitude"].to_numpy(), e["longitude"].to_numpy(), lat0)
@@ -116,11 +135,13 @@ class CalibArtefacts:
         if not normals:
             return pd.DataFrame()
         ax = pd.concat(normals)
-        out = obs.merge(ax[["waypoint", "time", "latitude", "longitude", "normal_e", "normal_n"]], on=["waypoint", "time"])
+        out = obs.merge(
+            ax[["waypoint", "time", "latitude", "longitude", "normal_e", "normal_n"]], on=["waypoint", "time"]
+        )
         out = out.dropna(subset=["normal_e"])
-        out["centre_lat"], out["centre_lon"] = offset_latlon(out["latitude"], out["longitude"],
-                                                             out["offset_m"] * out["normal_e"],
-                                                             out["offset_m"] * out["normal_n"])
+        out["centre_lat"], out["centre_lon"] = offset_latlon(
+            out["latitude"], out["longitude"], out["offset_m"] * out["normal_e"], out["offset_m"] * out["normal_n"]
+        )
         out["flight"], out["flight_id"] = str(meta["flight"]), str(meta["os_flight"])
         return out.drop(columns=["latitude", "longitude"])
 

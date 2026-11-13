@@ -13,8 +13,9 @@ EXE = [sys.executable, "-m", "skywind.cli"]
 
 
 def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([*EXE, *args], capture_output=True, text=True, timeout=900, check=False,
-                          env={**os.environ, **(env or {})})
+    return subprocess.run(
+        [*EXE, *args], capture_output=True, text=True, timeout=900, check=False, env={**os.environ, **(env or {})}
+    )
 
 
 def test_help_lists_commands() -> None:

@@ -34,14 +34,24 @@ def _ensure_calibration(settings: Settings, days: list[str]) -> None:
         run_calibration(settings, missing, GPParams.from_config(settings.gp))
 
 
-def aircraft_campaign(settings: Settings, variants: list[str], days: list[str] | None = None, ridge: bool = True,
-                      diagnostics: bool = True, transfer: bool = True) -> dict[str, Any]:
+def aircraft_campaign(
+    settings: Settings,
+    variants: list[str],
+    days: list[str] | None = None,
+    ridge: bool = True,
+    diagnostics: bool = True,
+    transfer: bool = True,
+) -> dict[str, Any]:
     days = days or available_days(settings.paths, "dev")  # holdout days are never used for tuning
     unknown = [v for v in variants if v not in VARIANTS]
     if unknown:
         raise ValueError(f"unknown variants {unknown}; known: {sorted(VARIANTS)}")
-    out = new_run_dir(settings.paths.runs, "eval-aircraft", "evaluation A (leave-one-aircraft-out, leave-one-day-out "
-                      f"hyperparameters) on {', '.join(days)}; variants {', '.join(variants)}")
+    out = new_run_dir(
+        settings.paths.runs,
+        "eval-aircraft",
+        "evaluation A (leave-one-aircraft-out, leave-one-day-out "
+        f"hyperparameters) on {', '.join(days)}; variants {', '.join(variants)}",
+    )
     if any(VARIANTS[v].use_cross for v in variants):
         _ensure_calibration(settings, days)
     scores = [run_aircraft(settings, days, v, out) for v in variants]
@@ -57,12 +67,17 @@ def aircraft_campaign(settings: Settings, variants: list[str], days: list[str] |
     return {"run": str(out), "pooled": pooled.to_dict("records")}
 
 
-def contrail_campaign(settings: Settings, aircraft_run: Path, variants: list[str], days: list[str] | None = None
-                      ) -> dict[str, Any]:
+def contrail_campaign(
+    settings: Settings, aircraft_run: Path, variants: list[str], days: list[str] | None = None
+) -> dict[str, Any]:
     source = CalibArtefacts(settings)
     days = days or source.days()
-    out = new_run_dir(settings.paths.runs, "eval-contrails", "evaluation B (advection vs GVCCS calibration artefacts) "
-                      f"on {', '.join(days)}; variants {', '.join(variants)}; hyperparameters from {aircraft_run}")
+    out = new_run_dir(
+        settings.paths.runs,
+        "eval-contrails",
+        "evaluation B (advection vs GVCCS calibration artefacts) "
+        f"on {', '.join(days)}; variants {', '.join(variants)}; hyperparameters from {aircraft_run}",
+    )
     res = run_contrails(settings, source, lodo_estimators(settings, aircraft_run, variants), out, days)
     pooled = res["drifts"][res["drifts"]["day"] == "pooled"]
     return {"run": str(out), "pooled_drift": pooled.to_dict("records")}

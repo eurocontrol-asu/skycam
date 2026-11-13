@@ -23,4 +23,6 @@ class FileSource(Protocol):
 class CommBSource(Protocol):
     """Raw Comm-B (DF20/21) replies of the given aircraft in [start, stop): columns mintime, rawmsg, icao24, serials."""
 
-    def fetch(self, start: pd.Timestamp, stop: pd.Timestamp, icao24: list[str]) -> tuple[pd.DataFrame, dict[str, object]]: ...
+    def fetch(
+        self, start: pd.Timestamp, stop: pd.Timestamp, icao24: list[str]
+    ) -> tuple[pd.DataFrame, dict[str, object]]: ...

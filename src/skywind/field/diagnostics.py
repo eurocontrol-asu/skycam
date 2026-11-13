@@ -3,8 +3,8 @@
 Hollingsworth-Lonnberg: the covariance of the along-heading innovations of pairs of DIFFERENT aircraft, binned by
 separation, is the background-error covariance projected on the two headings (observation errors and per-aircraft
 biases are uncorrelated between aircraft). For a pair, E[y_i y_j] = c(d) e_i . e_j, so each bin is estimated by least
-squares c = sum(y_i y_j e_i.e_j) / sum((e_i.e_j)^2). Extrapolated to zero separation, c(0) is the background variance and
-var(y) - c(0) the observation (bias + noise) variance; the decay gives the correlation lengths directly.
+squares c = sum(y_i y_j e_i.e_j) / sum((e_i.e_j)^2). Extrapolated to zero separation, c(0) is the background
+variance and var(y) - c(0) the observation (bias + noise) variance; the decay gives the correlation lengths directly.
 
 Desroziers et al. (2005): with d_ob = y - H x_b, d_oa = y - H x_a, d_ab = H x_a - H x_b,
 E[d_oa d_ob] = R and E[d_ab d_ob] = H B H^T; the ratios to the assumed values should be close to 1.
@@ -41,8 +41,9 @@ def _separations(X: FloatArray, i: slice) -> dict[str, FloatArray]:
     }
 
 
-def _accumulate(obs: ObsSet, y: FloatArray, dim: str, edges: FloatArray, limits: dict[str, float],
-                acc: FloatArray) -> None:
+def _accumulate(
+    obs: ObsSet, y: FloatArray, dim: str, edges: FloatArray, limits: dict[str, float], acc: FloatArray
+) -> None:
     for s in range(0, len(y), 500):
         i = slice(s, min(s + 500, len(y)))
         sep = _separations(obs.X, i)
@@ -80,8 +81,14 @@ def fit_correlation_length(table: pd.DataFrame, dimension: str, min_pairs: int =
     x, c = t["separation"].to_numpy(float), t["covariance"].to_numpy(float)
     p0 = (max(float(c[0]), 0.1), float(x[len(x) // 3]) + 1.0)
     try:
-        (c0, length), _ = curve_fit(lambda d, a, s: a * np.exp(-(d**2) / (2 * s**2)), x, c, p0=p0,
-                                    sigma=1 / np.sqrt(t["pairs"].to_numpy(float)), maxfev=5000)
+        (c0, length), _ = curve_fit(
+            lambda d, a, s: a * np.exp(-(d**2) / (2 * s**2)),
+            x,
+            c,
+            p0=p0,
+            sigma=1 / np.sqrt(t["pairs"].to_numpy(float)),
+            maxfev=5000,
+        )
     except RuntimeError:
         return {"c0": float("nan"), "length": float("nan")}
     return {"c0": float(c0), "length": float(abs(length))}

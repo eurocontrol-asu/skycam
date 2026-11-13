@@ -18,13 +18,47 @@ def test_wind_triangle() -> None:
 def _messages(roll: float = 0.0, hdg_jitter: float = 0.0) -> pd.DataFrame:
     rows = []
     for i in range(4):
-        common = {"t": 1_700_000_010.0 + 5 * i, "flight_id": "f", "icao24": "abc", "callsign": "X", "typecode": "A320",
-                  "latitude": 48.6, "longitude": 2.35, "altitude": 36000.0, "geoaltitude": 37000.0,
-                  "groundspeed": 450.0, "trk_sv": 90.0}
-        rows.append({**common, "bds": "50", "gs50": 450.0, "tas50": 440.0, "roll": roll, "trk50": 90.0,
-                     "mach60": np.nan, "ias60": np.nan, "hdg60": np.nan, "vrb60": np.nan})
-        rows.append({**common, "bds": "60", "gs50": np.nan, "tas50": np.nan, "roll": np.nan, "trk50": np.nan,
-                     "mach60": 0.78, "ias60": 262.0, "hdg60": 88.0 + hdg_jitter * (-1) ** i, "vrb60": 0.0})
+        common = {
+            "t": 1_700_000_010.0 + 5 * i,
+            "flight_id": "f",
+            "icao24": "abc",
+            "callsign": "X",
+            "typecode": "A320",
+            "latitude": 48.6,
+            "longitude": 2.35,
+            "altitude": 36000.0,
+            "geoaltitude": 37000.0,
+            "groundspeed": 450.0,
+            "trk_sv": 90.0,
+        }
+        rows.append(
+            {
+                **common,
+                "bds": "50",
+                "gs50": 450.0,
+                "tas50": 440.0,
+                "roll": roll,
+                "trk50": 90.0,
+                "mach60": np.nan,
+                "ias60": np.nan,
+                "hdg60": np.nan,
+                "vrb60": np.nan,
+            }
+        )
+        rows.append(
+            {
+                **common,
+                "bds": "60",
+                "gs50": np.nan,
+                "tas50": np.nan,
+                "roll": np.nan,
+                "trk50": np.nan,
+                "mach60": 0.78,
+                "ias60": 262.0,
+                "hdg60": 88.0 + hdg_jitter * (-1) ** i,
+                "vrb60": 0.0,
+            }
+        )
     return pd.DataFrame(rows)
 
 

@@ -30,9 +30,16 @@ def test_exported_field_is_a_drop_in_met_dataset(tmp_settings: Settings) -> None
     corrected = ds["eastward_wind"] - ds["era5_eastward_wind"]
     np.testing.assert_allclose(corrected, ds["residual_eastward_wind"], atol=1e-4)
     assert float(ds["residual_eastward_wind_std"].max()) <= GPParams().sigma_field + 1e-5
-    pts = pd.DataFrame({"flight_id": ["f"], "waypoint": [0], "latitude": [48.6], "longitude": [2.35],
-                        "level": [250.0], "emission_time": [t0 + pd.Timedelta(minutes=10)]})
+    pts = pd.DataFrame(
+        {
+            "flight_id": ["f"],
+            "waypoint": [0],
+            "latitude": [48.6],
+            "longitude": [2.35],
+            "level": [250.0],
+            "emission_time": [t0 + pd.Timedelta(minutes=10)],
+        }
+    )
     a = advect(pts, met_dataset(ds, "era5"), t0 + pd.Timedelta(minutes=30), max_age_min=30)
-    b = advect(pts, met_dataset(load_era5(tmp_settings.paths.era5(DAY))), t0 + pd.Timedelta(minutes=30),
-               max_age_min=30)
+    b = advect(pts, met_dataset(load_era5(tmp_settings.paths.era5(DAY))), t0 + pd.Timedelta(minutes=30), max_age_min=30)
     np.testing.assert_allclose(a["latitude"].to_numpy(), b["latitude"].to_numpy(), atol=1e-6)

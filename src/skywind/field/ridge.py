@@ -48,7 +48,7 @@ class RidgeEstimator:
         return (A22 * b1 - A12 * b2) / det, (A11 * b2 - A12 * b1) / det, A22 / det, A11 / det, -A12 / det
 
     def predict(self, points: Points) -> Prediction:
-        parts = [self._solve(self._weights(points.X[s:s + _CHUNK])) for s in range(0, len(points), _CHUNK)]
+        parts = [self._solve(self._weights(points.X[s : s + _CHUNK])) for s in range(0, len(points), _CHUNK)]
         cols = [np.concatenate([p[i] for p in parts]) if parts else np.zeros(0) for i in range(5)]
         return Prediction(cols[0], cols[1], cols[2], cols[3], cols[4], prior_var=self.prior_var)
 
@@ -57,14 +57,20 @@ class RidgeEstimator:
         idx = np.flatnonzero(self.obs.kind == ALONG)
         rows = []
         for s in range(0, len(idx), _CHUNK):
-            q = idx[s:s + _CHUNK]
+            q = idx[s : s + _CHUNK]
             W = self._weights(self.obs.X[q])
             W[self.obs.aircraft[q][:, None] == self.obs.aircraft[None, :]] = 0.0
             du, dv, vu, vv, cuv = self._solve(W)
             ex, ey = self.obs.e[q, 0], self.obs.e[q, 1]
             var_field = vu * ex**2 + 2 * cuv * ex * ey + vv * ey**2
-            frame = pd.DataFrame({"obs_index": q, "pred": du * ex + dv * ey, "var_field": var_field,
-                                  "var_total": var_field + self.cfg.sigma_obs**2})
+            frame = pd.DataFrame(
+                {
+                    "obs_index": q,
+                    "pred": du * ex + dv * ey,
+                    "var_field": var_field,
+                    "var_total": var_field + self.cfg.sigma_obs**2,
+                }
+            )
             if vectors:
                 frame["du"], frame["dv"] = du, dv
             rows.append(frame)

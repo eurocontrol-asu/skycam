@@ -39,12 +39,12 @@ def _scaled(XA: FloatArray, XB: FloatArray, lengths: Lengths) -> tuple[FloatArra
 
 def _matern(r2: FloatArray) -> FloatArray:
     r = _SQ3 * np.sqrt(r2)
-    return (1 + r) * np.exp(-r)
+    return np.asarray((1 + r) * np.exp(-r), dtype=np.float64)
 
 
 def _matern_dlog(r2: FloatArray) -> FloatArray:
     """d k / d log(length) for the Matern 3/2 correlation."""
-    return 3 * r2 * np.exp(-_SQ3 * np.sqrt(r2))
+    return np.asarray(3 * r2 * np.exp(-_SQ3 * np.sqrt(r2)), dtype=np.float64)
 
 
 def correlation(XA: FloatArray, XB: FloatArray, lengths: Lengths, kernel: Kernel = "gaussian") -> FloatArray:

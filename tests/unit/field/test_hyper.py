@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 from dataclasses import replace
 
 import numpy as np
@@ -23,13 +24,32 @@ def test_loglik_gradient_matches_finite_differences(kernel: str, cross: bool) ->
     obs = tracks([0.0, 90.0], n_tracks=2)
     if cross:
         c = obs.subset(np.arange(0, len(obs), 3))
-        obs = obs.concat(ObsSet(c.X, c.e[:, ::-1] * [1, -1], c.y, np.full(len(c), CROSS), c.aircraft, c.bg, c.day,
-                                c.icao24))
-    obs = ObsSet(obs.X + np.c_[np.zeros((len(obs), 2)), np.linspace(0, 300, len(obs))[:, None],
-                               np.linspace(0, 600, len(obs))[:, None]], obs.e, obs.y, obs.kind, obs.aircraft, obs.bg,
-                 obs.day, obs.icao24)
-    p = GPParams(length_h_km=50, length_z_m=250, length_t_min=8, sigma_field=2.0, sigma_bias=0.6, mean_bias=0.2,
-                 sigma_noise=0.8, kernel=kernel)  # type: ignore[arg-type]
+        obs = obs.concat(
+            ObsSet(c.X, c.e[:, ::-1] * [1, -1], c.y, np.full(len(c), CROSS), c.aircraft, c.bg, c.day, c.icao24)
+        )
+    obs = ObsSet(
+        obs.X
+        + np.c_[
+            np.zeros((len(obs), 2)), np.linspace(0, 300, len(obs))[:, None], np.linspace(0, 600, len(obs))[:, None]
+        ],
+        obs.e,
+        obs.y,
+        obs.kind,
+        obs.aircraft,
+        obs.bg,
+        obs.day,
+        obs.icao24,
+    )
+    p = GPParams(
+        length_h_km=50,
+        length_z_m=250,
+        length_t_min=8,
+        sigma_field=2.0,
+        sigma_bias=0.6,
+        mean_bias=0.2,
+        sigma_noise=0.8,
+        kernel=kernel,
+    )  # type: ignore[arg-type]
     names = free_parameters(p, cross)
     _, grad = block_loglik(obs, p, names)
     x = vector_from_params(p, names)
@@ -55,9 +75,17 @@ def test_no_bias_parameters_when_bias_disabled() -> None:
 
 def test_blocks_are_disjoint_in_time_and_thinned() -> None:
     obs = tracks([0.0, 90.0])
-    obs = ObsSet(obs.X + np.c_[np.zeros((len(obs), 3)), np.arange(len(obs))[:, None] * 10.0], obs.e, obs.y, obs.kind,
-                 obs.aircraft, obs.bg, obs.day, obs.icao24)
+    obs = ObsSet(
+        obs.X + np.c_[np.zeros((len(obs), 3)), np.arange(len(obs))[:, None] * 10.0],
+        obs.e,
+        obs.y,
+        obs.kind,
+        obs.aircraft,
+        obs.bg,
+        obs.day,
+        obs.icao24,
+    )
     blocks = make_blocks(obs, block_minutes=10, max_size=50)
     assert all(len(b) <= 50 for b in blocks)
     spans = [(b.X[:, 3].min(), b.X[:, 3].max()) for b in blocks]
-    assert all(s1[1] < s2[0] for s1, s2 in zip(spans, spans[1:], strict=False))
+    assert all(s1[1] < s2[0] for s1, s2 in itertools.pairwise(spans))

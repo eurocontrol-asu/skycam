@@ -14,7 +14,15 @@ def era5_ds() -> xr.Dataset:
     lat = np.arange(46.0, 51.01, 0.25)
     lon = np.arange(0.0, 5.01, 0.25)
     shape = (len(time), len(level), len(lat), len(lon))
-    data = {"u": np.full(shape, 10.0), "v": np.full(shape, -5.0), "t": np.full(shape, 220.0),
-            "q": np.full(shape, 1e-5), "w": np.zeros(shape), "z": np.full(shape, 1e5)}
-    return xr.Dataset({k: (("time", "level", "latitude", "longitude"), v) for k, v in data.items()},
-                      coords={"time": time, "level": level, "latitude": lat, "longitude": lon})
+    data = {
+        "u": np.full(shape, 10.0),
+        "v": np.full(shape, -5.0),
+        "t": np.full(shape, 220.0),
+        "q": np.full(shape, 1e-5),
+        "w": np.zeros(shape),
+        "z": np.full(shape, 1e5),
+    }
+    return xr.Dataset(
+        {k: (("time", "level", "latitude", "longitude"), v) for k, v in data.items()},
+        coords={"time": time, "level": level, "latitude": lat, "longitude": lon},
+    )

@@ -12,8 +12,17 @@ def _flight(n: int = 40, jump_every: int = 0) -> pd.DataFrame:
     lat = 48.0 + t * 230 / 111190.0  # 230 m/s due north
     if jump_every:
         lat[::jump_every] += 0.05
-    return pd.DataFrame({"flight_id": "f1", "t": t, "latitude": lat, "longitude": 2.0, "altitude": 36000.0,
-                         "geoaltitude": 37000.0, "groundspeed": 230 / 0.514444})
+    return pd.DataFrame(
+        {
+            "flight_id": "f1",
+            "t": t,
+            "latitude": lat,
+            "longitude": 2.0,
+            "altitude": 36000.0,
+            "geoaltitude": 37000.0,
+            "groundspeed": 230 / 0.514444,
+        }
+    )
 
 
 def test_position_track_due_north() -> None:
@@ -29,6 +38,6 @@ def test_sanitise_leaves_clean_data_untouched() -> None:
 
 
 def test_sanitise_repairs_jumping_positions() -> None:
-    df, rep = sanitise(_flight(80, jump_every=7))
+    _, rep = sanitise(_flight(80, jump_every=7))
     assert rep["bad_step_share"] > 0.1 and rep["repositioned"] > 0
     assert rep["bad_step_share_after"] < rep["bad_step_share"]

@@ -1,13 +1,14 @@
 """Gaussian-process (optimal interpolation) estimator of the ERA5 residual wind, solved locally.
 
-Model. The residual r(x, y, z, t) = (du, dv) has independent zero-mean GP components with variance ``sigma_field**2`` and
-a separable correlation (horizontal distance, pressure altitude, time). An observation is a scalar
+Model. The residual r(x, y, z, t) = (du, dv) has independent zero-mean GP components with variance
+``sigma_field**2`` and a separable correlation (horizontal distance, pressure altitude, time). An observation is a
+scalar
     y_i = e_i . r(X_i) + b_{a(i)} + eps_i,
 with e_i the heading (ALONG) or its right normal (CROSS, optional), b_a a per-aircraft random effect
 (along: airspeed bias ~ N(mean_bias, sigma_bias**2); cross: residual heading offset ~ N(0, sigma_cross_bias**2)) and
 white noise. The posterior mean and covariance of r at query points are exact conditional Gaussians, computed tile by
-tile on the observations within ``cutoff`` length scales of the tile (local GP), so that a whole day scales. Far from any
-observation the posterior mean tends to 0 (ERA5) and the variance to the prior variance.
+tile on the observations within ``cutoff`` length scales of the tile (local GP), so that a whole day scales.
+Far from any observation the posterior mean tends to 0 (ERA5) and the variance to the prior variance.
 """
 
 from __future__ import annotations
@@ -67,7 +68,7 @@ def _coords(X: FloatArray, bg: FloatArray, p: GPParams, t0: float) -> FloatArray
 
 def centred(obs: ObsSet, p: GPParams) -> FloatArray:
     """Observations minus the prior mean of the per-aircraft bias (along-heading rows only)."""
-    return obs.y - p.effective().mean_bias * (obs.kind == ALONG)
+    return np.asarray(obs.y - p.effective().mean_bias * (obs.kind == ALONG), dtype=np.float64)
 
 
 def _bias_and_noise(obs: ObsSet, p: GPParams) -> tuple[FloatArray, FloatArray, FloatArray]:
@@ -127,8 +128,9 @@ class GPEstimator:
 
     name = "gp"
 
-    def __init__(self, obs: ObsSet, params: GPParams, cutoff: float = 3.0, tile_minutes: float = 15.0,
-                 max_neighbours: int = 3000) -> None:
+    def __init__(
+        self, obs: ObsSet, params: GPParams, cutoff: float = 3.0, tile_minutes: float = 15.0, max_neighbours: int = 3000
+    ) -> None:
         self.obs = obs
         self.p = params
         self.cutoff = cutoff
@@ -225,26 +227,45 @@ class GPEstimator:
         y = self.yc[sel]
         alpha = P @ y
         is_target = np.isin(sel, targets)
-        frames = [self._loao_aircraft(obs, sel, P, y, alpha, np.flatnonzero(obs.aircraft == a), is_target, t0, vectors)
-                  for a in np.unique(self.obs.aircraft[targets])]
+        frames = [
+            self._loao_aircraft(obs, sel, P, y, alpha, np.flatnonzero(obs.aircraft == a), is_target, t0, vectors)
+            for a in np.unique(self.obs.aircraft[targets])
+        ]
         return pd.concat(frames, ignore_index=True)
 
-    def _loao_aircraft(self, obs: ObsSet, sel: IntArray, P: FloatArray, y: FloatArray, alpha: FloatArray,
-                       G: IntArray, is_target: Any, t0: float, vectors: bool) -> pd.DataFrame:
+    def _loao_aircraft(
+        self,
+        obs: ObsSet,
+        sel: IntArray,
+        P: FloatArray,
+        y: FloatArray,
+        alpha: FloatArray,
+        G: IntArray,
+        is_target: Any,
+        t0: float,
+        vectors: bool,
+    ) -> pd.DataFrame:
         Pgg_inv = np.linalg.inv(P[np.ix_(G, G)])
         mean = y[G] - Pgg_inv @ alpha[G]
         var_total = np.diag(Pgg_inv).copy()
         sb, sn = self.p.effective().sigma_bias, self.p.sigma_noise
         keep = is_target[G] & (obs.kind[G] == ALONG)
-        out = pd.DataFrame({"obs_index": sel[G][keep], "pred": mean[keep], "var_total": var_total[keep],
-                            "var_field": np.maximum(var_total[keep] - sb**2 - sn**2, 0.0)})
+        out = pd.DataFrame(
+            {
+                "obs_index": sel[G][keep],
+                "pred": mean[keep],
+                "var_total": var_total[keep],
+                "var_field": np.maximum(var_total[keep] - sb**2 - sn**2, 0.0),
+            }
+        )
         if vectors:
             du, dv = self._loo_vectors(obs, P, alpha, G, t0)
             out["du"], out["dv"] = du[keep], dv[keep]
         return out
 
-    def _loo_vectors(self, obs: ObsSet, P: FloatArray, alpha: FloatArray, G: IntArray, t0: float
-                     ) -> tuple[FloatArray, FloatArray]:
+    def _loo_vectors(
+        self, obs: ObsSet, P: FloatArray, alpha: FloatArray, G: IntArray, t0: float
+    ) -> tuple[FloatArray, FloatArray]:
         """Vector field at the points of group G from the other observations only:
         C_RR^-1 y_R = (P y)_R - P_RG P_GG^-1 (P y)_G."""
         R = np.setdiff1d(np.arange(len(alpha)), G)

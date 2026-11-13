@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
-from skywind.geo import KT, R_EARTH, FloatArray
+from skywind.geo import KT, R_EARTH
 
 __all__ = ["SV_COLUMNS", "add_position_track", "load_state_vectors", "sanitise", "step_inconsistency"]
 
@@ -59,11 +60,11 @@ def step_inconsistency(df: pd.DataFrame, rel_tol: float = 0.2) -> tuple[pd.Serie
     return has, ok
 
 
-def _reinterpolate(df: pd.DataFrame, good: FloatArray) -> int:
+def _reinterpolate(df: pd.DataFrame, good: npt.NDArray[np.bool_]) -> int:
     lat, lon, t = df["latitude"].to_numpy().copy(), df["longitude"].to_numpy().copy(), df["t"].to_numpy()
     fixed = 0
     for idx in df.groupby("flight_id", sort=False).indices.values():
-        gd = good[idx].astype(bool)
+        gd = good[idx]
         if gd.sum() >= 10 and (~gd).any():
             lat[idx[~gd]] = np.interp(t[idx[~gd]], t[idx[gd]], lat[idx[gd]])
             lon[idx[~gd]] = np.interp(t[idx[~gd]], t[idx[gd]], lon[idx[gd]])
@@ -96,7 +97,7 @@ def sanitise(df: pd.DataFrame, max_bad_share: float = 0.10) -> tuple[pd.DataFram
     ok_next = ok.groupby(df["flight_id"], sort=False).shift(-1)
     first = df.groupby("flight_id", sort=False).cumcount() == 0
     good = (ok | first) & ok_next.fillna(True).astype(bool) & ~(first & ok_next.isna())
-    report["repositioned"] = float(_reinterpolate(df, good.to_numpy(dtype=float)))
+    report["repositioned"] = float(_reinterpolate(df, good.to_numpy(dtype=bool)))
     report["altitude_spikes"] = float(sum(_despike(df, c) for c in ("altitude", "geoaltitude") if c in df))
     has, ok = step_inconsistency(df)
     report["bad_step_share_after"] = float(1 - ok[has].mean()) if has.any() else 0.0

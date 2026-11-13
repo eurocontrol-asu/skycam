@@ -55,8 +55,14 @@ def acquire(day: str, windows: str, overwrite: bool = False, config: Config = No
     s = _settings(config)
     d = parse_day(day)
     try:
-        rep = acquire_day(s, d, parse_windows(d, windows), default_file_sources(s),
-                          TrinoCommB(s.paths.cache / "opensky_query_cache"), overwrite)
+        rep = acquire_day(
+            s,
+            d,
+            parse_windows(d, windows),
+            default_file_sources(s),
+            TrinoCommB(s.paths.cache / "opensky_query_cache"),
+            overwrite,
+        )
     except Exception as exc:
         _fail(exc)
     rep["registered"] = register_day(s, d, parse_windows(d, windows))
@@ -101,8 +107,16 @@ def fit(*day: str, out: Path, cross: bool = False, config: Config = None) -> Non
 
 
 @app.command
-def export(day: str, method: str = "gp", params: Path | None = None, start: str | None = None,
-           stop: str | None = None, out: Path | None = None, cross: bool = False, config: Config = None) -> None:
+def export(
+    day: str,
+    method: str = "gp",
+    params: Path | None = None,
+    start: str | None = None,
+    stop: str | None = None,
+    out: Path | None = None,
+    cross: bool = False,
+    config: Config = None,
+) -> None:
     """Export the corrected wind of DAY as a pycontrails-ready NetCDF (default window: the day's windows)."""
     import pandas as pd
 
@@ -118,9 +132,16 @@ def export(day: str, method: str = "gp", params: Path | None = None, start: str 
 
 
 @app.command
-def advect(day: str, field: Path | None = None, points: Path | None = None, winds: str = "corrected",
-           out: Path | None = None, max_age_min: float = 40.0, config: Config = None) -> None:
-    """Advect emission points (default: cruise state vectors in the site box during the windows) on an exported field."""
+def advect(
+    day: str,
+    field: Path | None = None,
+    points: Path | None = None,
+    winds: str = "corrected",
+    out: Path | None = None,
+    max_age_min: float = 40.0,
+    config: Config = None,
+) -> None:
+    """Advect emission points (default: cruise state vectors in the site box) on an exported field."""
     import pandas as pd
 
     from skywind.pipeline import advect_step, cruise_emission_points
@@ -129,8 +150,9 @@ def advect(day: str, field: Path | None = None, points: Path | None = None, wind
     d = parse_day(day)
     info = day_info(s.paths, d)
     pts = pd.read_parquet(points) if points else cruise_emission_points(s, d, info.start, info.stop)
-    adv = advect_step(s, field or s.paths.fields(d), pts, info.stop + pd.Timedelta(minutes=max_age_min), winds,
-                      max_age_min)
+    adv = advect_step(
+        s, field or s.paths.fields(d), pts, info.stop + pd.Timedelta(minutes=max_age_min), winds, max_age_min
+    )
     dest = out or s.paths.advected(d, winds)
     dest.parent.mkdir(parents=True, exist_ok=True)
     adv.to_parquet(dest, index=False)
@@ -138,8 +160,13 @@ def advect(day: str, field: Path | None = None, points: Path | None = None, wind
 
 
 @app.command
-def run(day: str, windows: str | None = None, params: Path | None = None, acquire_missing: bool = True,
-        config: Config = None) -> None:
+def run(
+    day: str,
+    windows: str | None = None,
+    params: Path | None = None,
+    acquire_missing: bool = True,
+    config: Config = None,
+) -> None:
     """End-to-end for one DAY: (acquire) -> decode -> observe -> export -> advect (ERA5 and corrected)."""
     from skywind.workflow import run_day
 
@@ -151,8 +178,14 @@ def run(day: str, windows: str | None = None, params: Path | None = None, acquir
 
 
 @evaluate_app.command
-def aircraft(*variant: str, days: Days = None, ridge: bool = True, diagnostics: bool = True,
-             transfer: bool = True, config: Config = None) -> None:
+def aircraft(
+    *variant: str,
+    days: Days = None,
+    ridge: bool = True,
+    diagnostics: bool = True,
+    transfer: bool = True,
+    config: Config = None,
+) -> None:
     """Evaluation A: leave-one-aircraft-out skill with leave-one-day-out hyperparameters, per VARIANT (default gp)."""
     from skywind.evaluate.campaign import aircraft_campaign
 

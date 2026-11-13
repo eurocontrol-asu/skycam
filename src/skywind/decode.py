@@ -48,7 +48,9 @@ def decode_bds50(mb: U64Array) -> dict[str, FloatArray | BoolArray]:
     track = (trk_raw * 90.0 / 512.0) % 360.0
     gs, tas = v_gs * 2.0, v_tas * 2.0
     status = (s_roll == 1) & (s_trk == 1) & (s_gs == 1) & (s_tas == 1) & ((s_rate == 1) | (rate_raw == 0))
-    physical = (np.abs(roll) <= 40) & (gs >= 150) & (gs <= 700) & (tas >= 150) & (tas <= 600) & (np.abs(tas - gs) <= 220)
+    physical = (
+        (np.abs(roll) <= 40) & (gs >= 150) & (gs <= 700) & (tas >= 150) & (tas <= 600) & (np.abs(tas - gs) <= 220)
+    )
     return {
         "roll": roll,
         "trk50": track,
@@ -77,7 +79,12 @@ def decode_bds60(mb: U64Array) -> dict[str, FloatArray | BoolArray]:
         & ((s_vi == 1) | ((sg_vi == 0) & (v_vi == 0)))
     )
     physical = (
-        (ias >= 120) & (ias <= 450) & (mach >= 0.3) & (mach <= 0.95) & (np.abs(vr_baro) <= 6000) & (np.abs(vr_ins) <= 6000)
+        (ias >= 120)
+        & (ias <= 450)
+        & (mach >= 0.3)
+        & (mach <= 0.95)
+        & (np.abs(vr_baro) <= 6000)
+        & (np.abs(vr_ins) <= 6000)
     )
     return {
         "hdg60": heading,

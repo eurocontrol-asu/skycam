@@ -88,4 +88,4 @@ def circular_mean_deg(sin_mean: Any, cos_mean: Any) -> FloatArray:
 def circular_sd_deg(sin_mean: Any, cos_mean: Any) -> FloatArray:
     """Circular standard deviation (deg) from the mean sine and cosine."""
     r = np.minimum(np.hypot(_f(sin_mean), _f(cos_mean)), 1.0)
-    return np.degrees(np.sqrt(np.maximum(-2 * np.log(np.maximum(r, 1e-300)), 0.0)))
+    return _f(np.degrees(np.sqrt(np.maximum(-2 * np.log(np.maximum(r, 1e-300)), 0.0))))

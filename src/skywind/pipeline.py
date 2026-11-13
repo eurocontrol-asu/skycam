@@ -93,8 +93,9 @@ def load_observations(settings: Settings, days: list[str]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
-def observation_set(settings: Settings, day: str, use_cross: bool = False,
-                    exclude_offset_days: tuple[str, ...] = ()) -> ObsSet:
+def observation_set(
+    settings: Settings, day: str, use_cross: bool = False, exclude_offset_days: tuple[str, ...] = ()
+) -> ObsSet:
     """Observations of a day as an :class:`ObsSet`; with ``use_cross``, heading offsets from the persistent table
     (optionally excluding days) are applied and cross-heading rows added for the calibrated airframes."""
     w = pd.read_parquet(settings.paths.observations(day))
@@ -120,8 +121,13 @@ def calibrate_step(settings: Settings, day: str, params: GPParams, reference: st
     u_ref, v_ref = w["u_era"].to_numpy(float).copy(), w["v_era"].to_numpy(float).copy()
     if reference == "field":
         obs = ObsSet.from_frame(w, settings.site)
-        loo = GPEstimator(obs, replace(params, flow_following=False), settings.gp.cutoff, settings.gp.tile_minutes,
-                          settings.gp.max_neighbours).loao(vectors=True)
+        loo = GPEstimator(
+            obs,
+            replace(params, flow_following=False),
+            settings.gp.cutoff,
+            settings.gp.tile_minutes,
+            settings.gp.max_neighbours,
+        ).loao(vectors=True)
         idx = loo["obs_index"].to_numpy(int)
         u_ref[idx] += loo["du"].to_numpy(float)
         v_ref[idx] += loo["dv"].to_numpy(float)
@@ -139,20 +145,29 @@ def fit_step(settings: Settings, days: list[str], base: GPParams, out: Path, use
     return summary
 
 
-def fitted_field(settings: Settings, day: str, params: GPParams, method: str = "gp",
-                 use_cross: bool = False) -> CorrectedWind:
+def fitted_field(
+    settings: Settings, day: str, params: GPParams, method: str = "gp", use_cross: bool = False
+) -> CorrectedWind:
     """ERA5 + residual estimator built from the day's observations."""
     obs = observation_set(settings, day, use_cross)
     if method == "gp":
-        est: ResidualEstimator = GPEstimator(obs, params, settings.gp.cutoff, settings.gp.tile_minutes,
-                                             settings.gp.max_neighbours)
+        est: ResidualEstimator = GPEstimator(
+            obs, params, settings.gp.cutoff, settings.gp.tile_minutes, settings.gp.max_neighbours
+        )
     else:
         est = build_estimator(obs, settings, method)
     return CorrectedWind(Era5.from_file(settings.paths.era5(day)), est, settings)
 
 
-def export_step(settings: Settings, day: str, field: CorrectedWind, start: pd.Timestamp, stop: pd.Timestamp,
-                out: Path | None = None, attrs: dict[str, Any] | None = None) -> Path:
+def export_step(
+    settings: Settings,
+    day: str,
+    field: CorrectedWind,
+    start: pd.Timestamp,
+    stop: pd.Timestamp,
+    out: Path | None = None,
+    attrs: dict[str, Any] | None = None,
+) -> Path:
     """Gridded corrected wind (NetCDF, pycontrails-ready) over [start, stop] (+ configured padding)."""
     era = field.era5.ds
     grid = export_grid(era, settings.site, settings.export, start, stop)
@@ -163,15 +178,22 @@ def export_step(settings: Settings, day: str, field: CorrectedWind, start: pd.Ti
     return write_netcdf(ds, out or settings.paths.fields(day))
 
 
-def advect_step(settings: Settings, field_path: Path, points: pd.DataFrame, until: pd.Timestamp,
-                winds: str = "corrected", max_age_min: float = 90.0) -> pd.DataFrame:
+def advect_step(
+    settings: Settings,
+    field_path: Path,
+    points: pd.DataFrame,
+    until: pd.Timestamp,
+    winds: str = "corrected",
+    max_age_min: float = 90.0,
+) -> pd.DataFrame:
     """Advect emission points on an exported dataset (``winds`` = corrected | era5)."""
     ds = xr.open_dataset(field_path)
     return advect(points, met_dataset(ds, "era5" if winds == "era5" else "corrected"), until, max_age_min=max_age_min)
 
 
-def cruise_emission_points(settings: Settings, day: str, start: pd.Timestamp, stop: pd.Timestamp,
-                           every_s: float = 30.0) -> pd.DataFrame:
+def cruise_emission_points(
+    settings: Settings, day: str, start: pd.Timestamp, stop: pd.Timestamp, every_s: float = 30.0
+) -> pd.DataFrame:
     """Default emission points of a day: cruise state vectors inside the site box during [start, stop]."""
     sv, _ = state_vectors(settings, day)
     site = settings.site

@@ -30,8 +30,9 @@ CF_NAMES = {
 }
 
 
-def export_grid(era5: xr.Dataset, site: Site, cfg: ExportConfig, start: pd.Timestamp, stop: pd.Timestamp
-                ) -> dict[str, np.ndarray]:
+def export_grid(
+    era5: xr.Dataset, site: Site, cfg: ExportConfig, start: pd.Timestamp, stop: pd.Timestamp
+) -> dict[str, np.ndarray]:
     """ERA5 latitudes / longitudes within ``half_width_deg`` of the site, ERA5 levels plus a regular ``level_step_hpa``
     grid, and times every ``time_step_min`` aligned on the hour, covering [start - pad_before, stop + pad_after]."""
     lat, lon = era5["latitude"].values, era5["longitude"].values
@@ -56,16 +57,24 @@ def era5_on_grid(era5: xr.Dataset, grid: dict[str, np.ndarray]) -> xr.Dataset:
 def residual_dataset(ds: xr.Dataset, estimator: ResidualEstimator, site: Site) -> xr.Dataset:
     """Residual posterior on every node of ``ds`` (ERA5 on the export grid, short names u, v...)."""
     sub = ds[["u", "v"]].transpose("time", "level", "latitude", "longitude")
-    T, P, LA, LO = np.meshgrid(sub["time"].values.astype("datetime64[ns]").astype(np.int64) / 1e9,
-                               sub["level"].values, sub["latitude"].values, sub["longitude"].values, indexing="ij")
+    T, P, LA, LO = np.meshgrid(
+        sub["time"].values.astype("datetime64[ns]").astype(np.int64) / 1e9,
+        sub["level"].values,
+        sub["latitude"].values,
+        sub["longitude"].values,
+        indexing="ij",
+    )
     bg = np.stack([np.nan_to_num(sub["u"].values.ravel()), np.nan_to_num(sub["v"].values.ravel())], 1)
     pred = estimator.predict(Points.from_geo(site, T.ravel(), P.ravel(), LA.ravel(), LO.ravel(), bg))
     dims = ("time", "level", "latitude", "longitude")
     shape = T.shape
     fields = {
-        "residual_eastward_wind": pred.du, "residual_northward_wind": pred.dv,
-        "residual_eastward_wind_std": pred.std_u, "residual_northward_wind_std": pred.std_v,
-        "residual_wind_covariance": pred.cov_uv, "residual_information": pred.information,
+        "residual_eastward_wind": pred.du,
+        "residual_northward_wind": pred.dv,
+        "residual_eastward_wind_std": pred.std_u,
+        "residual_northward_wind_std": pred.std_v,
+        "residual_wind_covariance": pred.cov_uv,
+        "residual_information": pred.information,
     }
     return xr.Dataset({k: (dims, v.reshape(shape).astype(np.float32)) for k, v in fields.items()}, coords=sub.coords)
 

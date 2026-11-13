@@ -19,8 +19,9 @@ def test_era5_advection_and_drift_match_the_prototype(real_settings: Settings) -
     if not root.is_dir():
         pytest.skip("prototype artefacts not reachable")
     truth = CalibArtefacts(real_settings).load(DAY)
-    adv = advect(truth.emissions, met_dataset(load_era5(real_settings.paths.era5(DAY))), truth.last_time,
-                 max_age_min=45)
+    adv = advect(
+        truth.emissions, met_dataset(load_era5(real_settings.paths.era5(DAY))), truth.last_time, max_age_min=45
+    )
     ref = pd.read_parquet(root / "flights" / f"advected_{DAY}.parquet")
     ref["flight_id"] = ref["flight_id"].astype(str)
     ref["time"] = ref["time"].dt.as_unit("ns")

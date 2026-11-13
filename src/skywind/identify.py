@@ -8,9 +8,9 @@ A reply is accepted as
 Replies passing both tests are ambiguous and dropped.
 
 Receiver clock check: some OpenSky receivers stamp replies minutes away from the truth (2024-05-10), which mixes
-headings of different flight legs. Each receiver is scored on the cruise replies only it received that look like BDS 5,0;
-a receiver with enough such replies whose share of |dGS| <= 2 kt or |dtrack| <= 0.5 deg is too low is distrusted and
-every reply it contributed to is dropped.
+headings of different flight legs. Each receiver is scored on the cruise replies only it received that look like
+BDS 5,0; a receiver with enough such replies whose share of |dGS| <= 2 kt or |dtrack| <= 0.5 deg is too low is
+distrusted and every reply it contributed to is dropped.
 """
 
 from __future__ import annotations
@@ -23,8 +23,19 @@ from skywind.geo import FT, KT, angle_diff_deg, cas_from_mach, isa_pressure_pa
 
 __all__ = ["attach_state_vectors", "decode_day", "distrusted_receivers", "identify_registers", "receiver_scores"]
 
-_SV_KEEP = ["t", "icao24", "flight_id", "callsign", "typecode", "latitude", "longitude", "altitude", "geoaltitude",
-            "groundspeed", "trk_sv"]
+_SV_KEEP = [
+    "t",
+    "icao24",
+    "flight_id",
+    "callsign",
+    "typecode",
+    "latitude",
+    "longitude",
+    "altitude",
+    "geoaltitude",
+    "groundspeed",
+    "trk_sv",
+]
 
 
 def attach_state_vectors(msgs: pd.DataFrame, sv: pd.DataFrame, max_gap_s: float) -> pd.DataFrame:
@@ -32,8 +43,8 @@ def attach_state_vectors(msgs: pd.DataFrame, sv: pd.DataFrame, max_gap_s: float)
     right = sv[_SV_KEEP].rename(columns={"t": "t_sv"}).sort_values("t_sv")
     right = right.assign(tk=right["t_sv"], icao24=right["icao24"].astype(str).astype(object))
     left = msgs.sort_values("t").assign(icao24=msgs["icao24"].astype(str).astype(object))
-    m = pd.merge_asof(left, right, left_on="t", right_on="tk",
-                      by="icao24", direction="nearest", tolerance=max_gap_s)
+    tol: object = max_gap_s  # numeric tolerance on a numeric key (the stubs only list time deltas)
+    m = pd.merge_asof(left, right, left_on="t", right_on="tk", by="icao24", direction="nearest", tolerance=tol)  # type: ignore[arg-type]
     m = m.dropna(subset=["latitude", "trk_sv", "groundspeed"]).drop(columns=["tk"]).reset_index(drop=True)
     dist = m["groundspeed"] * KT * (m["t"] - m["t_sv"])
     trk = np.radians(m["trk_sv"])
@@ -43,7 +54,7 @@ def attach_state_vectors(msgs: pd.DataFrame, sv: pd.DataFrame, max_gap_s: float)
 
 
 def receiver_scores(m: pd.DataFrame, min_alt_ft: float) -> pd.DataFrame:
-    """Per single-receiver serial: number of BDS 5,0-like cruise replies and shares with |dGS| <= 2 kt, |dtrk| <= 0.5 deg."""
+    """Per single-receiver serial: BDS 5,0-like cruise replies and shares with |dGS| <= 2 kt, |dtrk| <= 0.5 deg."""
     s = m[m["ok50"] & ~m["serials"].str.contains(" ", regex=False) & (m["altitude"] >= min_alt_ft)]
     dtrk = angle_diff_deg(s["trk50"], s["trk_sv"])
     dgs = (s["gs50"] - s["groundspeed"]).to_numpy()

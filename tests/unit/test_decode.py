@@ -44,8 +44,14 @@ def test_empty_payload_is_invalid() -> None:
 
 
 def test_decode_payloads_keeps_valid_rows_and_drops_short_messages() -> None:
-    raw = pd.DataFrame({"mintime": [1.0, 2.0, 3.0], "rawmsg": [BDS50, BDS60, "A0001393"],
-                        "icao24": ["abc", "abc", "abc"], "serials": ["1", "1 2", "3"]})
+    raw = pd.DataFrame(
+        {
+            "mintime": [1.0, 2.0, 3.0],
+            "rawmsg": [BDS50, BDS60, "A0001393"],
+            "icao24": ["abc", "abc", "abc"],
+            "serials": ["1", "1 2", "3"],
+        }
+    )
     out = decode_payloads(raw)
     assert list(out["t"]) == [1.0, 2.0]
     assert bool(out["ok50"].iloc[0]) and bool(out["ok60"].iloc[1])

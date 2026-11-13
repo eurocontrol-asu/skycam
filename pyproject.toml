@@ -68,5 +68,5 @@ files = ["src/skywind"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["ppigrf.*", "pycontrails.*", "pyopensky.*", "sqlalchemy.*", "netCDF4.*", "xarray.*"]
+module = ["threadpoolctl.*", "ppigrf.*", "pycontrails.*", "pyopensky.*", "sqlalchemy.*", "netCDF4.*", "xarray.*"]
 ignore_missing_imports = true

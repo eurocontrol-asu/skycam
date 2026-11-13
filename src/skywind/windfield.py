@@ -1,4 +1,4 @@
-"""Corrected wind = ERA5 + estimated residual, with its uncertainty, at arbitrary (time, pressure or altitude, lat, lon)."""
+"""Corrected wind = ERA5 + estimated residual, with uncertainty, at any (time, pressure or altitude, lat, lon)."""
 
 from __future__ import annotations
 
@@ -29,8 +29,13 @@ class ResidualEstimator(Protocol):
 def build_estimator(obs: ObsSet, settings: Settings, method: str = "gp") -> ResidualEstimator:
     """``gp`` (default) or ``ridge`` (prototype baseline) from the configuration."""
     if method == "gp":
-        return GPEstimator(obs, GPParams.from_config(settings.gp), settings.gp.cutoff, settings.gp.tile_minutes,
-                           settings.gp.max_neighbours)
+        return GPEstimator(
+            obs,
+            GPParams.from_config(settings.gp),
+            settings.gp.cutoff,
+            settings.gp.tile_minutes,
+            settings.gp.max_neighbours,
+        )
     if method == "ridge":
         return RidgeEstimator(obs, settings.ridge)
     raise ValueError(f"unknown estimator {method!r} (gp | ridge)")
@@ -53,10 +58,20 @@ class CorrectedWind:
         u, v = self.era5.wind(t, p, la, lo)
         bg = np.stack([np.nan_to_num(u), np.nan_to_num(v)], 1)
         pred = self.estimator.predict(Points.from_geo(self.site, t.ravel(), p.ravel(), la.ravel(), lo.ravel(), bg))
-        return pd.DataFrame({
-            "u_era5": u, "v_era5": v, "du": pred.du, "dv": pred.dv, "u": u + pred.du, "v": v + pred.dv,
-            "std_u": pred.std_u, "std_v": pred.std_v, "cov_uv": pred.cov_uv, "information": pred.information,
-        })
+        return pd.DataFrame(
+            {
+                "u_era5": u,
+                "v_era5": v,
+                "du": pred.du,
+                "dv": pred.dv,
+                "u": u + pred.du,
+                "v": v + pred.dv,
+                "std_u": pred.std_u,
+                "std_v": pred.std_v,
+                "cov_uv": pred.cov_uv,
+                "information": pred.information,
+            }
+        )
 
     def at_altitude(self, t_epoch: object, alt_m: object, lat: object, lon: object) -> pd.DataFrame:
         """Same as :meth:`at` with ISA pressure altitude (m) instead of pressure."""

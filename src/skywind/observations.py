@@ -29,16 +29,45 @@ def _sin_cos(m: pd.DataFrame, col: str, name: str) -> None:
 def _aggregate(m: pd.DataFrame) -> pd.DataFrame:
     key = ["flight_id", "b"]
     is50, is60 = m["bds"] == "50", m["bds"] == "60"
-    a = m[is50].groupby(key).agg(
-        n50=("t", "size"), gs=("gs50", "median"), tas=("tas50", "median"), roll=("abs_roll", "max"),
-        trk_s=("trk_s", "mean"), trk_c=("trk_c", "mean"), gs_sd=("gs50", "std"), tas_sd=("tas50", "std"))
-    b = m[is60].groupby(key).agg(
-        n60=("t", "size"), mach=("mach60", "median"), ias=("ias60", "median"), hdg_s=("hdg_s", "mean"),
-        hdg_c=("hdg_c", "mean"), vrb=("abs_vrb", "max"))
+    a = (
+        m[is50]
+        .groupby(key)
+        .agg(
+            n50=("t", "size"),
+            gs=("gs50", "median"),
+            tas=("tas50", "median"),
+            roll=("abs_roll", "max"),
+            trk_s=("trk_s", "mean"),
+            trk_c=("trk_c", "mean"),
+            gs_sd=("gs50", "std"),
+            tas_sd=("tas50", "std"),
+        )
+    )
+    b = (
+        m[is60]
+        .groupby(key)
+        .agg(
+            n60=("t", "size"),
+            mach=("mach60", "median"),
+            ias=("ias60", "median"),
+            hdg_s=("hdg_s", "mean"),
+            hdg_c=("hdg_c", "mean"),
+            vrb=("abs_vrb", "max"),
+        )
+    )
     c = m.groupby(key).agg(
-        t=("t", "mean"), latitude=("latitude", "mean"), longitude=("longitude", "mean"), altitude=("altitude", "median"),
-        geoaltitude=("geoaltitude", "median"), icao24=("icao24", "first"), callsign=("callsign", "first"),
-        typecode=("typecode", "first"), gs_sv=("groundspeed", "median"), sv_s=("sv_s", "mean"), sv_c=("sv_c", "mean"))
+        t=("t", "mean"),
+        latitude=("latitude", "mean"),
+        longitude=("longitude", "mean"),
+        altitude=("altitude", "median"),
+        geoaltitude=("geoaltitude", "median"),
+        icao24=("icao24", "first"),
+        callsign=("callsign", "first"),
+        typecode=("typecode", "first"),
+        gs_sv=("groundspeed", "median"),
+        sv_s=("sv_s", "mean"),
+        sv_c=("sv_c", "mean"),
+    )
     return a.join(b, how="inner").join(c, how="inner").reset_index()
 
 

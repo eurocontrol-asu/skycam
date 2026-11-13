@@ -7,8 +7,15 @@ from skywind.field.data import ALONG, ObsSet, Points
 from skywind.field.gp import GPEstimator, GPParams
 
 T0 = 1.7e9
-PARAMS = GPParams(length_h_km=60.0, length_z_m=400.0, length_t_min=60.0, sigma_field=3.0, sigma_bias=0.5,
-                  mean_bias=0.0, sigma_noise=0.5)
+PARAMS = GPParams(
+    length_h_km=60.0,
+    length_z_m=400.0,
+    length_t_min=60.0,
+    sigma_field=3.0,
+    sigma_bias=0.5,
+    mean_bias=0.0,
+    sigma_noise=0.5,
+)
 
 
 def true_field(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -35,8 +42,16 @@ def tracks(headings_deg: list[float], n_tracks: int = 8, seed: int = 0) -> ObsSe
     obs_y = du * e[:, 0] + dv * e[:, 1] + bias + rng.normal(0, 0.5, len(x))
     X = np.stack([x, y, np.full_like(x, 10000.0), np.full_like(x, T0)], 1)
     n = len(x)
-    return ObsSet(X, e, obs_y, np.zeros(n, np.int64), a.astype(np.int64), np.zeros((n, 2)),
-                  np.array(["d"] * n), np.array([f"a{int(i)}" for i in a]))
+    return ObsSet(
+        X,
+        e,
+        obs_y,
+        np.zeros(n, np.int64),
+        a.astype(np.int64),
+        np.zeros((n, 2)),
+        np.array(["d"] * n),
+        np.array([f"a{int(i)}" for i in a]),
+    )
 
 
 def grid_points() -> Points:
@@ -92,8 +107,9 @@ def test_loao_matches_refitting_without_each_aircraft(use_bias: bool) -> None:
     p = GPParams(**{**PARAMS.as_dict(), "use_bias": use_bias, "mean_bias": 0.3})
     fast = GPEstimator(obs, p, cutoff=50.0, tile_minutes=1e6).loao(vectors=True)
     np.testing.assert_allclose(fast["pred"].to_numpy(), _brute_force_loao(obs, p)[fast["obs_index"]], atol=1e-6)
-    np.testing.assert_allclose(fast["du"] * obs.e[fast["obs_index"], 0] + fast["dv"] * obs.e[fast["obs_index"], 1],
-                               fast["pred"], atol=1e-6)
+    np.testing.assert_allclose(
+        fast["du"] * obs.e[fast["obs_index"], 0] + fast["dv"] * obs.e[fast["obs_index"], 1], fast["pred"], atol=1e-6
+    )
     assert np.all(obs.kind[fast["obs_index"]] == ALONG)
 
 
@@ -106,10 +122,26 @@ def test_loao_variance_includes_bias_and_noise() -> None:
 def test_flow_following_shifts_structures_with_background_wind() -> None:
     # one observation at x=0 at T0; background wind 50 m/s eastward; query 20 min later
     X = np.array([[0.0, 0.0, 10000.0, T0]])
-    obs = ObsSet(X, np.array([[1.0, 0.0]]), np.array([3.0]), np.zeros(1, np.int64), np.zeros(1, np.int64),
-                 np.array([[50.0, 0.0]]), np.array(["d"]), np.array(["a"]))
-    p = GPParams(length_h_km=20, length_z_m=300, length_t_min=60, sigma_field=2, sigma_bias=0.1, mean_bias=0,
-                 sigma_noise=0.3, flow_following=True)
+    obs = ObsSet(
+        X,
+        np.array([[1.0, 0.0]]),
+        np.array([3.0]),
+        np.zeros(1, np.int64),
+        np.zeros(1, np.int64),
+        np.array([[50.0, 0.0]]),
+        np.array(["d"]),
+        np.array(["a"]),
+    )
+    p = GPParams(
+        length_h_km=20,
+        length_z_m=300,
+        length_t_min=60,
+        sigma_field=2,
+        sigma_bias=0.1,
+        mean_bias=0,
+        sigma_noise=0.3,
+        flow_following=True,
+    )
     q = Points(np.array([[60.0, 0.0, 10000.0, T0 + 1200], [0.0, 0.0, 10000.0, T0 + 1200]]), np.full((2, 2), 0.0))
     q = Points(q.X, np.array([[50.0, 0.0], [50.0, 0.0]]))
     pred = GPEstimator(obs, p).predict(q)

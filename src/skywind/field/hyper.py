@@ -61,8 +61,11 @@ def free_parameters(p: GPParams, has_cross: bool) -> list[str]:
     return names
 
 
-def params_from_vector(base: GPParams, names: Sequence[str], x: Sequence[float]) -> GPParams:
-    values = {n.removeprefix("log_"): (float(v) if n == "mean_bias" else math.exp(float(v))) for n, v in zip(names, x, strict=False)}
+def params_from_vector(base: GPParams, names: Sequence[str], x: Sequence[float] | FloatArray) -> GPParams:
+    values: dict[str, Any] = {
+        n.removeprefix("log_"): (float(v) if n == "mean_bias" else math.exp(float(v)))
+        for n, v in zip(names, x, strict=False)
+    }
     return replace(base, **values)
 
 
@@ -131,12 +134,25 @@ class FitResult:
     message: str
 
     def summary(self) -> dict[str, Any]:
-        return {**self.params.as_dict(), "loglik": self.loglik, "n_obs": self.n_obs, "n_blocks": self.n_blocks,
-                "n_eval": self.n_eval, "converged": self.converged, "message": self.message}
+        return {
+            **self.params.as_dict(),
+            "loglik": self.loglik,
+            "n_obs": self.n_obs,
+            "n_blocks": self.n_blocks,
+            "n_eval": self.n_eval,
+            "converged": self.converged,
+            "message": self.message,
+        }
 
 
-def fit_gp(obs_sets: Sequence[ObsSet], base: GPParams, block_minutes: float = 30.0, max_block: int = 2500,
-           workers: int = 8, maxiter: int = 60) -> FitResult:
+def fit_gp(
+    obs_sets: Sequence[ObsSet],
+    base: GPParams,
+    block_minutes: float = 30.0,
+    max_block: int = 2500,
+    workers: int = 8,
+    maxiter: int = 60,
+) -> FitResult:
     """Maximum composite marginal likelihood over the blocks of all ``obs_sets`` (e.g. one per training day)."""
     blocks = [b for o in obs_sets for b in make_blocks(o, block_minutes, max_block)]
     has_cross = any(bool((b.kind == CROSS).any()) for b in blocks)
@@ -144,8 +160,9 @@ def fit_gp(obs_sets: Sequence[ObsSet], base: GPParams, block_minutes: float = 30
     bounds = [BOUNDS[n] for n in names]
     counter = {"n": 0}
     order = np.argsort([-len(b) for b in blocks])
-    with ProcessPoolExecutor(max_workers=max(1, min(workers, len(blocks))), initializer=_init,
-                             initargs=(blocks,)) as pool:
+    with ProcessPoolExecutor(
+        max_workers=max(1, min(workers, len(blocks))), initializer=_init, initargs=(blocks,)
+    ) as pool:
 
         def objective(x: FloatArray) -> tuple[float, FloatArray]:
             counter["n"] += 1
@@ -155,8 +172,15 @@ def fit_gp(obs_sets: Sequence[ObsSet], base: GPParams, block_minutes: float = 30
 
         x0 = np.clip(vector_from_params(base, names), [b[0] for b in bounds], [b[1] for b in bounds])
         opt = minimize(objective, x0, jac=True, method="L-BFGS-B", bounds=bounds, options={"maxiter": maxiter})
-    return FitResult(params_from_vector(base, names, opt.x), -float(opt.fun), sum(len(b) for b in blocks),
-                     len(blocks), counter["n"], bool(opt.success), str(opt.message))
+    return FitResult(
+        params_from_vector(base, names, opt.x),
+        -float(opt.fun),
+        sum(len(b) for b in blocks),
+        len(blocks),
+        counter["n"],
+        bool(opt.success),
+        str(opt.message),
+    )
 
 
 def ridge_loao_mse(obs: ObsSet, cfg: RidgeConfig) -> tuple[float, int]:
@@ -165,10 +189,16 @@ def ridge_loao_mse(obs: ObsSet, cfg: RidgeConfig) -> tuple[float, int]:
     return float(np.sum(err**2)), len(err)
 
 
-def fit_ridge(obs_sets: Sequence[ObsSet], base: RidgeConfig, grid: dict[str, Sequence[float]] | None = None) -> pd.DataFrame:
+def fit_ridge(
+    obs_sets: Sequence[ObsSet], base: RidgeConfig, grid: dict[str, Sequence[float]] | None = None
+) -> pd.DataFrame:
     """LOAO mean squared error of every grid combination pooled over ``obs_sets``; sorted, best first."""
-    grid = grid or {"length_h_km": [20, 40, 75, 150], "length_z_m": [150, 300, 500, 1000],
-                    "length_t_min": [5, 10, 20, 40], "sigma_prior": [1.0, 2.0, 4.0]}
+    grid = grid or {
+        "length_h_km": [20, 40, 75, 150],
+        "length_z_m": [150, 300, 500, 1000],
+        "length_t_min": [5, 10, 20, 40],
+        "sigma_prior": [1.0, 2.0, 4.0],
+    }
     rows = []
     for combo in itertools.product(*grid.values()):
         cfg = base.model_copy(update=dict(zip(grid, combo, strict=False)))

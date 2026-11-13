@@ -31,14 +31,25 @@ def _acquire(settings: Settings, day: str, windows: str) -> dict[str, Any]:
     from skywind.acquire import acquire_day, default_file_sources, register_day
     from skywind.sources.opensky_trino import TrinoCommB
 
-    rep = acquire_day(settings, day, parse_windows(day, windows), default_file_sources(settings),
-                      TrinoCommB(settings.paths.cache / "opensky_query_cache"))
+    rep = acquire_day(
+        settings,
+        day,
+        parse_windows(day, windows),
+        default_file_sources(settings),
+        TrinoCommB(settings.paths.cache / "opensky_query_cache"),
+    )
     rep["registered"] = register_day(settings, day, parse_windows(day, windows))
     return rep
 
 
-def run_day(settings: Settings, day: str, windows: str | None = None, params: Path | None = None,
-            acquire_missing: bool = True, max_age_min: float = 40.0) -> dict[str, Any]:
+def run_day(
+    settings: Settings,
+    day: str,
+    windows: str | None = None,
+    params: Path | None = None,
+    acquire_missing: bool = True,
+    max_age_min: float = 40.0,
+) -> dict[str, Any]:
     report: dict[str, Any] = {"day": day}
     if not _inputs_present(settings, day):
         if not (acquire_missing and windows):

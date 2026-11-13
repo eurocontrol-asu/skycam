@@ -36,8 +36,12 @@ class Era5:
     def __init__(self, ds: xr.Dataset) -> None:
         self.ds = ds
         t = ds["time"].values.astype("datetime64[ns]").astype(np.int64) / 1e9
-        self.axes = (t, ds["level"].values.astype(float), ds["latitude"].values.astype(float),
-                     ds["longitude"].values.astype(float))
+        self.axes = (
+            t,
+            ds["level"].values.astype(float),
+            ds["latitude"].values.astype(float),
+            ds["longitude"].values.astype(float),
+        )
         self._f: dict[str, RegularGridInterpolator] = {}
 
     @classmethod

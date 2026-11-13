@@ -14,9 +14,22 @@ def _truth_and_advected(offset_m: float, drift: float) -> tuple[ContrailTruth, p
     t0 = pd.Timestamp("2024-03-18T12:00", tz="UTC")
     times = [t0 + pd.Timedelta(minutes=float(a)) for a in ages]
     lat, lon = np.full(len(ages), 48.6), np.full(len(ages), 2.35)
-    c_lat, c_lon = offset_latlon(lat, lon, offset_m + drift * ages, 0.0)  # contrail to the east = right of a northbound track
-    centres = pd.DataFrame({"flight": "g1", "flight_id": "f1", "waypoint": 0, "time": times, "age_min": ages,
-                            "centre_lat": c_lat, "centre_lon": c_lon, "normal_e": 1.0, "normal_n": 0.0})
+    c_lat, c_lon = offset_latlon(
+        lat, lon, offset_m + drift * ages, 0.0
+    )  # contrail to the east = right of a northbound track
+    centres = pd.DataFrame(
+        {
+            "flight": "g1",
+            "flight_id": "f1",
+            "waypoint": 0,
+            "time": times,
+            "age_min": ages,
+            "centre_lat": c_lat,
+            "centre_lon": c_lon,
+            "normal_e": 1.0,
+            "normal_n": 0.0,
+        }
+    )
     adv = pd.DataFrame({"flight_id": "f1", "waypoint": 0, "time": times, "latitude": lat, "longitude": lon})
     return ContrailTruth("20240318", pd.DataFrame(), centres), adv
 
@@ -34,7 +47,7 @@ def test_paired_tables() -> None:
     e1 = cross_track_errors(truth, adv, Site())
     e2 = e1.assign(error_m=e1["error_m"] - 15.0 * e1["age_min"])
     fits = {"era5": flight_fits(e1), "gp": flight_fits(e2)}
-    paired, summary = drift_table(fits)
+    _, summary = drift_table(fits)
     assert summary.set_index("day").loc["pooled", "improved_gp"] == 1.0
     ages = age_table({"era5": e1, "gp": e2}, fits)
     pooled = ages[(ages["day"] == "pooled") & (ages["method"] == "gp")]
