@@ -9,7 +9,9 @@ import pandas as pd
 
 from skywind.config import Settings
 from skywind.days import available_days
+from skywind.evaluate.contrails import TruthSource
 from skywind.evaluate.gvccs_calib import CalibArtefacts
+from skywind.evaluate.gvccs_raw import GvccsRaw
 from skywind.evaluate.runner import (
     VARIANTS,
     lodo_estimators,
@@ -69,14 +71,19 @@ def aircraft_campaign(
 
 
 def contrail_campaign(
-    settings: Settings, aircraft_runs: list[Path], variants: list[str], days: list[str] | None = None
+    settings: Settings,
+    aircraft_runs: list[Path],
+    variants: list[str],
+    days: list[str] | None = None,
+    truth: str = "raw",
 ) -> dict[str, Any]:
-    source = CalibArtefacts(settings)
+    """Evaluation B. ``truth``: ``raw`` (GVCCS annotations, any day) or ``calib`` (prototype artefacts, six days)."""
+    source: TruthSource = GvccsRaw(settings) if truth == "raw" else CalibArtefacts(settings)
     days = days or source.days()
     out = new_run_dir(
         settings.paths.runs,
         "eval-contrails",
-        "evaluation B (advection vs GVCCS calibration artefacts) "
+        f"evaluation B (advection vs GVCCS, truth {truth}) "
         f"on {', '.join(days)}; variants {', '.join(variants)}; "
         f"hyperparameters from {', '.join(map(str, aircraft_runs))}",
     )

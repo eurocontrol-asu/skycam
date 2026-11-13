@@ -203,13 +203,14 @@ def contrails(
     *variant: str,
     aircraft_runs: Annotated[list[Path], cyclopts.Parameter(consume_multiple=True)],
     days: Days = None,
+    truth: str = "raw",
     config: Config = None,
 ) -> None:
     """Evaluation B: advection vs the GVCCS calibration artefacts, with the LODO fits of the evaluation A runs."""
     from skywind.evaluate.campaign import contrail_campaign
 
     s = _settings(config)
-    _print(contrail_campaign(s, aircraft_runs, list(variant) or ["gp"], days))
+    _print(contrail_campaign(s, aircraft_runs, list(variant) or ["gp"], days, truth))
 
 
 @evaluate_app.command
@@ -232,6 +233,32 @@ def merge_contrails(*run: Path, config: Config = None) -> None:
     out = new_run_dir(s.paths.runs, "eval-contrails-merged", f"evaluation B, merge of {', '.join(map(str, run))}")
     merge_contrail_runs(list(run), out)
     _print({"run": str(out)})
+
+
+@evaluate_app.command
+def validate_truth(days: Days = None, config: Config = None) -> None:
+    """Compare the raw-GVCCS truth source with the prototype calibration artefacts (ERA5 drift per flight)."""
+    from skywind.evaluate.gvccs_calib import CalibArtefacts
+    from skywind.evaluate.gvccs_raw import GvccsRaw
+    from skywind.evaluate.validation import compare_truth_sources
+    from skywind.runs import new_run_dir
+
+    s = _settings(config)
+    calib = CalibArtefacts(s)
+    days = days or calib.days()
+    out = new_run_dir(
+        s.paths.runs, "truth-validation", f"raw GVCCS truth vs calibration artefacts on {', '.join(days)}"
+    )
+    pairs = compare_truth_sources(s, GvccsRaw(s), calib, days, out)
+    d = pairs.dropna()
+    _print(
+        {
+            "run": str(out),
+            "flights_paired": len(d),
+            "drift_corr": float(d["drift_m_per_min_raw"].corr(d["drift_m_per_min_calib"])),
+            "drift_abs_diff_median": float((d["drift_m_per_min_raw"] - d["drift_m_per_min_calib"]).abs().median()),
+        }
+    )
 
 
 @evaluate_app.command
