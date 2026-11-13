@@ -1,0 +1,12 @@
+/data
+/store
+/prototype
+/gvccs
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+skywind.local.toml
