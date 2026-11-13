@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-__all__ = ["aircraft_report", "contrail_report", "markdown_table"]
+__all__ = ["aircraft_report", "contrail_report", "markdown_table", "table_a", "table_b"]
 
 _A_COLS = ["day", "n_obs", "rmse_era5", "rmse_field", "skill", "z_sd", "cover68", "cover95"]
 
@@ -121,3 +121,50 @@ def contrail_report(run: Path) -> str:
     if cal.is_file():
         parts += ["Per-flight drift / (60 x posterior sd along the normal):", "", markdown_table(pd.read_csv(cal)), ""]
     return "\n".join(parts)
+
+
+_A_KEEP = {
+    "gp_matern_flow": "GP (frozen config, LODO fits)",
+    "ridge": "ridge (LODO grid)",
+    "gp_frozen": "GP frozen",
+    "gp_frozen_dayvar": "GP frozen + day variances",
+    "ridge_dev": "ridge (dev kernel)",
+}
+
+
+def table_a(dev_run: Path | None, holdout_run: Path | None) -> pd.DataFrame:
+    """Per day and pooled scores of evaluation A, dev (leave-one-day-out) and holdout (frozen) side by side."""
+    parts = []
+    for run, set_name in ((dev_run, "dev"), (holdout_run, "holdout")):
+        if run is None:
+            continue
+        t = pd.read_csv(run / "summary.csv", dtype={"day": str})
+        t = t[t["variant"].isin(_A_KEEP)].assign(set=set_name)
+        parts.append(t)
+    t = pd.concat(parts, ignore_index=True)
+    t["label"] = t["variant"].map(_A_KEEP)
+    cols = [
+        "set",
+        "day",
+        "variant",
+        "label",
+        "n_obs",
+        "n_aircraft",
+        "rmse_era5",
+        "rmse_field",
+        "skill",
+        "z_mean",
+        "z_sd",
+        "cover68",
+        "cover95",
+    ]
+    return t[cols]
+
+
+def table_b(run: Path) -> dict[str, pd.DataFrame]:
+    """Evaluation B tables of a run: drift / offset per day, distance by age, paired tests."""
+    return {
+        "drift": pd.read_csv(run / "drift_summary.csv", dtype={"day": str}),
+        "age": pd.read_csv(run / "age_summary.csv", dtype={"day": str}),
+        "tests": pd.read_csv(run / "paired_tests.csv", dtype={"day": str}),
+    }

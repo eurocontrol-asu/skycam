@@ -326,6 +326,31 @@ def figures(
 
 
 @evaluate_app.command
+def tables(
+    dev_aircraft: Path | None = None,
+    holdout_aircraft: Path | None = None,
+    contrails: Annotated[list[Path] | None, cyclopts.Parameter(consume_multiple=True)] = None,
+    config: Config = None,
+) -> None:
+    """Write the README tables as CSV (and print them as markdown) from evaluation run directories."""
+    from skywind.evaluate.report import markdown_table, table_a, table_b
+    from skywind.runs import new_run_dir
+
+    s = _settings(config)
+    out = new_run_dir(s.paths.runs, "tables", f"README tables from {dev_aircraft}, {holdout_aircraft}, {contrails}")
+    parts = []
+    if dev_aircraft or holdout_aircraft:
+        a = table_a(dev_aircraft, holdout_aircraft)
+        a.to_csv(out / "table_A.csv", index=False)
+        parts.append(markdown_table(a.drop(columns=["variant"]), 3))
+    for run in contrails or []:
+        for name, t in table_b(run).items():
+            t.to_csv(out / f"table_B_{name}_{run.name}.csv", index=False)
+            parts.append(f"{run.name} {name}\n" + markdown_table(t, 2))
+    sys.stdout.write(f"tables in {out}\n\n" + "\n\n".join(parts) + "\n")
+
+
+@evaluate_app.command
 def report(aircraft_run: Path | None = None, contrail_run: Path | None = None) -> None:
     """Markdown tables of an evaluation A and / or B run directory."""
     from skywind.evaluate.report import aircraft_report, contrail_report
