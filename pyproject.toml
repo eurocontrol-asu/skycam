@@ -36,11 +36,10 @@ packages = ["src/skywind"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--import-mode=importlib -m 'not slow'"
+addopts = "--import-mode=importlib -m 'not integration and not e2e'"
 markers = [
     "integration: real files (data stores)",
     "e2e: command-line, subprocess",
-    "slow: long-running, excluded by default",
 ]
 
 [tool.ruff]

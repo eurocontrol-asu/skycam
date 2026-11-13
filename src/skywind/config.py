@@ -135,13 +135,13 @@ class GPConfig(BaseModel):
     """
 
     kernel: Literal["gaussian", "matern32"] = "gaussian"
-    length_h_km: float = 40.0
-    length_z_m: float = 300.0
-    length_t_min: float = 15.0
-    sigma_field: float = 2.0
-    sigma_bias: float = 1.0
-    mean_bias: float = -0.25
-    sigma_noise: float = 1.2
+    length_h_km: float = 26.1
+    length_z_m: float = 196.0
+    length_t_min: float = 31.0
+    sigma_field: float = 1.58
+    sigma_bias: float = 0.96
+    mean_bias: float = -0.20
+    sigma_noise: float = 0.65
     use_bias: bool = True
     flow_following: bool = False
     use_cross: bool = False

@@ -179,6 +179,7 @@ def _contrail_day(
     stop = truth.last_time
     s = settings.model_copy(deep=True)
     s.export.pad_before_min, s.export.pad_after_min = 5.0, 5.0
+    s.export.min_level_hpa, s.export.max_level_hpa = 170.0, 350.0  # contrail emission levels: ~190-280 hPa
     errors, stds = {}, {}
     for name, est in fields.items():
         path = export_step(
@@ -271,7 +272,7 @@ def lodo_estimators(
             p = _fold_params(pd.read_csv(aircraft_run / f"fits_{name}.csv"), day, base)
             obs = observation_set(settings, day, v.use_cross, (day,) if v.strict_offsets else ())
             out[name] = GPEstimator(obs, p, **_est_kwargs(settings))
-        if with_ridge:
+        if with_ridge and (aircraft_run / "fits_ridge.csv").is_file():
             fits = pd.read_csv(aircraft_run / "fits_ridge.csv", dtype={"held_out": str})
             row = fits[fits["held_out"] == day].iloc[0].to_dict()
             cfg = settings.ridge.model_copy(
