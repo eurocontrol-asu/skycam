@@ -10,6 +10,7 @@ day are fitted on the other days only.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from typing import Any, Protocol
 
 import numpy as np
@@ -54,42 +55,43 @@ def score_predictions(pred: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _lodo(days: Sequence[str], fit: Callable[[list[str]], tuple[Any, dict[str, Any]]],
-          predict: Callable[[str, Any], pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame]:
+def lodo_gp(days: Sequence[str], obs_provider: Callable[[str], Mapping[str, ObsSet]], base: GPParams,
+            fit_kwargs: dict[str, Any] | None = None, est_kwargs: dict[str, Any] | None = None
+            ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """GP hyperparameters fitted (marginal likelihood) on all days but one, LOAO on the held-out day.
+
+    ``obs_provider(held_out)`` returns the observation sets of every day for that fold (so that a calibration table can
+    exclude the held-out day).
+    """
+    fk, ek = fit_kwargs or {}, est_kwargs or {}
     preds, fits = [], []
     for day in days:
-        params, summary = fit([d for d in days if d != day])
-        fits.append({"held_out": day, **summary})
-        preds.append(predict(day, params))
+        sets = obs_provider(day)
+        res = fit_gp([sets[d] for d in days if d != day], base, **fk)
+        fits.append({"held_out": day, **res.summary()})
+        preds.append(loao_frame(GPEstimator(sets[day], res.params, **ek), sets[day], res.params.effective().mean_bias))
     return pd.concat(preds, ignore_index=True), pd.DataFrame(fits)
 
 
-def lodo_gp(obs_by_day: Mapping[str, ObsSet], base: GPParams, fit_kwargs: dict[str, Any] | None = None,
-            est_kwargs: dict[str, Any] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """GP hyperparameters fitted (marginal likelihood) on all days but one, LOAO on the held-out day."""
-    fk, ek = fit_kwargs or {}, est_kwargs or {}
-
-    def fit(train: list[str]) -> tuple[GPParams, dict[str, Any]]:
-        res = fit_gp([obs_by_day[d] for d in train], base, **fk)
-        return res.params, res.summary()
-
-    def predict(day: str, p: GPParams) -> pd.DataFrame:
-        return loao_frame(GPEstimator(obs_by_day[day], p, **ek), obs_by_day[day], p.effective().mean_bias)
-
-    return _lodo(list(obs_by_day), fit, predict)
+def ridge_grid_tables(obs_by_day: Mapping[str, ObsSet], base: RidgeConfig,
+                      grid: dict[str, Sequence[float]] | None = None, workers: int = 1) -> pd.DataFrame:
+    """LOAO squared-error sums of every grid combination, per day (computed once, reused by every fold)."""
+    days = list(obs_by_day)
+    with ProcessPoolExecutor(max_workers=max(1, min(workers, len(days)))) as pool:
+        tables = list(pool.map(fit_ridge, [[obs_by_day[d]] for d in days], [base] * len(days), [grid] * len(days)))
+    return pd.concat([t.assign(day=d, sse=t["mse"] * t["n"]) for d, t in zip(days, tables, strict=False)], ignore_index=True)
 
 
-def lodo_ridge(obs_by_day: Mapping[str, ObsSet], base: RidgeConfig,
-               grid: dict[str, Sequence[float]] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Ridge kernel and prior fitted by LOAO grid search on all days but one, LOAO on the held-out day."""
-
-    def fit(train: list[str]) -> tuple[RidgeConfig, dict[str, Any]]:
-        table = fit_ridge([obs_by_day[d] for d in train], base, grid)
-        best = table.iloc[0].to_dict()
-        cfg = base.model_copy(update={k: float(v) for k, v in best.items() if k in RidgeConfig.model_fields})
-        return cfg, {**cfg.model_dump(), "train_mse": best["mse"]}
-
-    def predict(day: str, cfg: RidgeConfig) -> pd.DataFrame:
-        return loao_frame(RidgeEstimator(obs_by_day[day], cfg), obs_by_day[day], 0.0)
-
-    return _lodo(list(obs_by_day), fit, predict)
+def lodo_ridge(obs_by_day: Mapping[str, ObsSet], base: RidgeConfig, grid: dict[str, Sequence[float]] | None = None,
+               workers: int = 1) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Ridge kernel and prior chosen by pooled LOAO error on all days but one, LOAO on the held-out day."""
+    table = ridge_grid_tables(obs_by_day, base, grid, workers)
+    keys = [k for k in table.columns if k in RidgeConfig.model_fields]
+    preds, fits = [], []
+    for day in obs_by_day:
+        train = table[table["day"] != day].groupby(keys, as_index=False)[["sse", "n"]].sum()
+        best = train.assign(mse=train["sse"] / train["n"]).sort_values("mse").iloc[0]
+        cfg = base.model_copy(update={k: float(best[k]) for k in keys})
+        fits.append({"held_out": day, **cfg.model_dump(), "train_mse": float(best["mse"])})
+        preds.append(loao_frame(RidgeEstimator(obs_by_day[day], cfg), obs_by_day[day], 0.0))
+    return pd.concat(preds, ignore_index=True), pd.DataFrame(fits)

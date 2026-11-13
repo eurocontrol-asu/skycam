@@ -6,18 +6,44 @@ summary. The command-line interface only calls these functions.
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import xarray as xr
 
+from skywind import __version__
+from skywind.advect import advect, emission_points, met_dataset
 from skywind.config import Settings
 from skywind.decode import decode_payloads
 from skywind.era5 import Era5
+from skywind.export import era5_on_grid, export_grid, residual_dataset, to_met_dataset, write_netcdf
+from skywind.field.data import ObsSet
+from skywind.field.gp import GPEstimator, GPParams
+from skywind.field.heading import combine_offsets, offset_terms, update_table
+from skywind.field.hyper import fit_gp
 from skywind.identify import decode_day
-from skywind.observations import add_residuals, bin_observations
+from skywind.observations import add_residuals, apply_heading_offsets, bin_observations
+from skywind.runs import write_json
 from skywind.statevectors import add_position_track, load_state_vectors, sanitise
+from skywind.windfield import CorrectedWind, ResidualEstimator, build_estimator
 
-__all__ = ["decode_step", "load_observations", "observe_step", "state_vectors"]
+__all__ = [
+    "advect_step",
+    "calibrate_step",
+    "cruise_emission_points",
+    "decode_step",
+    "export_step",
+    "fit_step",
+    "fitted_field",
+    "gp_params",
+    "load_observations",
+    "observation_set",
+    "observe_step",
+    "state_vectors",
+]
 
 
 def state_vectors(settings: Settings, day: str) -> tuple[pd.DataFrame, dict[str, float]]:
@@ -65,3 +91,91 @@ def observe_step(settings: Settings, day: str) -> dict[str, Any]:
 def load_observations(settings: Settings, days: list[str]) -> pd.DataFrame:
     frames = [pd.read_parquet(settings.paths.observations(d)) for d in days]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def observation_set(settings: Settings, day: str, use_cross: bool = False,
+                    exclude_offset_days: tuple[str, ...] = ()) -> ObsSet:
+    """Observations of a day as an :class:`ObsSet`; with ``use_cross``, heading offsets from the persistent table
+    (optionally excluding days) are applied and cross-heading rows added for the calibrated airframes."""
+    w = pd.read_parquet(settings.paths.observations(day))
+    if use_cross:
+        table = pd.read_parquet(settings.paths.heading_table())
+        offsets = combine_offsets(table, exclude_offset_days)["offset_deg"]
+        w = apply_heading_offsets(w, offsets)
+    return ObsSet.from_frame(w, settings.site, use_cross=use_cross)
+
+
+def gp_params(settings: Settings, params_file: Path | None = None) -> GPParams:
+    """GP hyperparameters from the configuration, overridden by a fitted-parameter JSON file if given."""
+    base = GPParams.from_config(settings.gp)
+    if params_file is None:
+        return base
+    values = json.loads(params_file.read_text())
+    return replace(base, **{k: v for k, v in values.items() if k in GPParams.__dataclass_fields__})
+
+
+def calibrate_step(settings: Settings, day: str, params: GPParams, reference: str = "field") -> dict[str, Any]:
+    """Heading-offset statistics of a day against ERA5 (+ the along-only field of the other aircraft) -> table."""
+    w = pd.read_parquet(settings.paths.observations(day))
+    u_ref, v_ref = w["u_era"].to_numpy(float).copy(), w["v_era"].to_numpy(float).copy()
+    if reference == "field":
+        obs = ObsSet.from_frame(w, settings.site)
+        loo = GPEstimator(obs, replace(params, flow_following=False), settings.gp.cutoff, settings.gp.tile_minutes,
+                          settings.gp.max_neighbours).loao(vectors=True)
+        idx = loo["obs_index"].to_numpy(int)
+        u_ref[idx] += loo["du"].to_numpy(float)
+        v_ref[idx] += loo["dv"].to_numpy(float)
+    terms = offset_terms(w, u_ref, v_ref)
+    table = update_table(settings.paths.heading_table(), day, terms, reference)
+    return {"day": day, "airframes": len(terms), "table_rows": len(table), "table_days": int(table["day"].nunique())}
+
+
+def fit_step(settings: Settings, days: list[str], base: GPParams, out: Path, use_cross: bool = False) -> dict[str, Any]:
+    """Marginal-likelihood fit of the GP hyperparameters on ``days``; written as JSON."""
+    sets = [observation_set(settings, d, use_cross) for d in days]
+    res = fit_gp(sets, base, workers=settings.max_workers)
+    summary = {**res.summary(), "days": days}
+    write_json(out, summary)
+    return summary
+
+
+def fitted_field(settings: Settings, day: str, params: GPParams, method: str = "gp",
+                 use_cross: bool = False) -> CorrectedWind:
+    """ERA5 + residual estimator built from the day's observations."""
+    obs = observation_set(settings, day, use_cross)
+    if method == "gp":
+        est: ResidualEstimator = GPEstimator(obs, params, settings.gp.cutoff, settings.gp.tile_minutes,
+                                             settings.gp.max_neighbours)
+    else:
+        est = build_estimator(obs, settings, method)
+    return CorrectedWind(Era5.from_file(settings.paths.era5(day)), est, settings)
+
+
+def export_step(settings: Settings, day: str, field: CorrectedWind, start: pd.Timestamp, stop: pd.Timestamp,
+                out: Path | None = None, attrs: dict[str, Any] | None = None) -> Path:
+    """Gridded corrected wind (NetCDF, pycontrails-ready) over [start, stop] (+ configured padding)."""
+    era = field.era5.ds
+    grid = export_grid(era, settings.site, settings.export, start, stop)
+    on_grid = era5_on_grid(era, grid)
+    residual = residual_dataset(on_grid, field.estimator, settings.site)
+    meta = {"day": day, "estimator": field.estimator.name, "skywind_version": __version__, **(attrs or {})}
+    ds = to_met_dataset(on_grid, residual, meta)
+    return write_netcdf(ds, out or settings.paths.fields(day))
+
+
+def advect_step(settings: Settings, field_path: Path, points: pd.DataFrame, until: pd.Timestamp,
+                winds: str = "corrected", max_age_min: float = 90.0) -> pd.DataFrame:
+    """Advect emission points on an exported dataset (``winds`` = corrected | era5)."""
+    ds = xr.open_dataset(field_path)
+    return advect(points, met_dataset(ds, "era5" if winds == "era5" else "corrected"), until, max_age_min=max_age_min)
+
+
+def cruise_emission_points(settings: Settings, day: str, start: pd.Timestamp, stop: pd.Timestamp,
+                           every_s: float = 30.0) -> pd.DataFrame:
+    """Default emission points of a day: cruise state vectors inside the site box during [start, stop]."""
+    sv, _ = state_vectors(settings, day)
+    site = settings.site
+    inside = ((sv["latitude"] - site.lat).abs() <= site.box_deg) & ((sv["longitude"] - site.lon).abs() <= site.box_deg)
+    sel = inside & (sv["altitude"] >= site.min_alt_ft) & sv["timestamp"].between(start, stop)
+    sel &= (sv["t"] % every_s) < 1e-6
+    return emission_points(sv[sel])

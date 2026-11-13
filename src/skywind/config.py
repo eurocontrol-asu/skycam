@@ -23,6 +23,7 @@ __all__ = [
     "RidgeConfig",
     "Settings",
     "Site",
+    "SourcesConfig",
     "load_settings",
 ]
 
@@ -175,6 +176,15 @@ class ExportConfig(BaseModel):
     pad_after_min: float = 10.0
 
 
+class SourcesConfig(BaseModel):
+    """Where a new day is fetched from. Remote paths are configuration (``skywind.toml``), not code."""
+
+    remote_host: str | None = None
+    opensky_pattern: str | None = None
+    era5_pattern: str | None = None
+    commb_padding_min: float = 45.0
+
+
 class Settings(BaseModel):
     paths: Paths = Field(default_factory=Paths)
     site: Site = Field(default_factory=Site)
@@ -183,6 +193,7 @@ class Settings(BaseModel):
     gp: GPConfig = Field(default_factory=GPConfig)
     ridge: RidgeConfig = Field(default_factory=RidgeConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
+    sources: SourcesConfig = Field(default_factory=SourcesConfig)
     max_workers: int = 8
 
 

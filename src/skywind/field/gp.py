@@ -239,13 +239,15 @@ class GPEstimator:
         out = pd.DataFrame({"obs_index": sel[G][keep], "pred": mean[keep], "var_total": var_total[keep],
                             "var_field": np.maximum(var_total[keep] - sb**2 - sn**2, 0.0)})
         if vectors:
-            du, dv = self._loo_vectors(obs, P, y, G, t0)
+            du, dv = self._loo_vectors(obs, P, alpha, G, t0)
             out["du"], out["dv"] = du[keep], dv[keep]
         return out
 
-    def _loo_vectors(self, obs: ObsSet, P: FloatArray, y: FloatArray, G: IntArray, t0: float) -> tuple[FloatArray, ...]:
-        R = np.setdiff1d(np.arange(len(y)), G)
-        a_r = P[np.ix_(R, R)] @ y[R] - P[np.ix_(R, G)] @ np.linalg.solve(P[np.ix_(G, G)], P[np.ix_(G, R)] @ y[R])
-        rest = obs.subset(R)
-        Ku, Kv = cross_covariance(Points(obs.X[G], obs.bg[G]), rest, self.p, t0)
+    def _loo_vectors(self, obs: ObsSet, P: FloatArray, alpha: FloatArray, G: IntArray, t0: float
+                     ) -> tuple[FloatArray, FloatArray]:
+        """Vector field at the points of group G from the other observations only:
+        C_RR^-1 y_R = (P y)_R - P_RG P_GG^-1 (P y)_G."""
+        R = np.setdiff1d(np.arange(len(alpha)), G)
+        a_r = alpha[R] - P[np.ix_(R, G)] @ np.linalg.solve(P[np.ix_(G, G)], alpha[G])
+        Ku, Kv = cross_covariance(Points(obs.X[G], obs.bg[G]), obs.subset(R), self.p, t0)
         return Ku @ a_r, Kv @ a_r

@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import cho_factor, cho_solve
 from scipy.optimize import minimize
+from threadpoolctl import threadpool_limits
 
 from skywind.config import RidgeConfig
 from skywind.field.data import ALONG, CROSS, ObsSet
@@ -61,7 +62,7 @@ def free_parameters(p: GPParams, has_cross: bool) -> list[str]:
 
 
 def params_from_vector(base: GPParams, names: Sequence[str], x: Sequence[float]) -> GPParams:
-    values = {n.removeprefix("log_"): (float(v) if n == "mean_bias" else math.exp(float(v))) for n, v in zip(names, x)}
+    values = {n.removeprefix("log_"): (float(v) if n == "mean_bias" else math.exp(float(v))) for n, v in zip(names, x, strict=False)}
     return replace(base, **values)
 
 
@@ -109,7 +110,8 @@ _BLOCKS: list[ObsSet] = []
 
 
 def _init(blocks: list[ObsSet]) -> None:
-    global _BLOCKS  # noqa: PLW0603 - worker-local cache of the blocks (sent once per worker)
+    threadpool_limits(1)  # one BLAS thread per worker process
+    global _BLOCKS
     _BLOCKS = blocks
 
 
@@ -169,7 +171,7 @@ def fit_ridge(obs_sets: Sequence[ObsSet], base: RidgeConfig, grid: dict[str, Seq
                     "length_t_min": [5, 10, 20, 40], "sigma_prior": [1.0, 2.0, 4.0]}
     rows = []
     for combo in itertools.product(*grid.values()):
-        cfg = base.model_copy(update=dict(zip(grid, combo)))
-        sse, n = map(sum, zip(*(ridge_loao_mse(o, cfg) for o in obs_sets)))
-        rows.append({**dict(zip(grid, combo)), "mse": sse / max(n, 1), "n": n})
+        cfg = base.model_copy(update=dict(zip(grid, combo, strict=False)))
+        sse, n = map(sum, zip(*(ridge_loao_mse(o, cfg) for o in obs_sets), strict=False))
+        rows.append({**dict(zip(grid, combo, strict=False)), "mse": sse / max(n, 1), "n": n})
     return pd.DataFrame(rows).sort_values("mse").reset_index(drop=True)
