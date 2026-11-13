@@ -31,6 +31,7 @@ from skywind.statevectors import add_position_track, load_state_vectors, sanitis
 from skywind.windfield import CorrectedWind, ResidualEstimator, build_estimator
 
 __all__ = [
+    "DAY_VARIANCES",
     "advect_step",
     "calibrate_step",
     "cruise_emission_points",
@@ -151,11 +152,25 @@ def fit_step(settings: Settings, days: list[str], base: GPParams, out: Path, use
     return summary
 
 
+DAY_VARIANCES = ("log_sigma_field", "log_sigma_bias", "log_sigma_noise")
+
+
 def fitted_field(
-    settings: Settings, day: str, params: GPParams, method: str = "gp", use_cross: bool = False
+    settings: Settings,
+    day: str,
+    params: GPParams,
+    method: str = "gp",
+    use_cross: bool = False,
+    day_variances: bool = True,
 ) -> CorrectedWind:
-    """ERA5 + residual estimator built from the day's observations."""
+    """ERA5 + residual estimator built from the day's observations.
+
+    With ``day_variances`` (GP only), the field, bias and noise variances are re-estimated by marginal likelihood on
+    the day's own aircraft data (length scales unchanged): the residual amplitude varies from day to day and this keeps
+    the posterior uncertainty calibrated (evaluation A, variant gp_matern_dayvar)."""
     obs = observation_set(settings, day, use_cross)
+    if method == "gp" and day_variances and len(obs) >= 50:
+        params = fit_gp([obs], params, only=DAY_VARIANCES, workers=settings.max_workers).params
     if method == "gp":
         est: ResidualEstimator = GPEstimator(
             obs, params, settings.gp.cutoff, settings.gp.tile_minutes, settings.gp.max_neighbours

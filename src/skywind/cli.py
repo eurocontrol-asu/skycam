@@ -116,6 +116,7 @@ def export(
     stop: str | None = None,
     out: Path | None = None,
     cross: bool = False,
+    day_variances: bool = True,
     config: Config = None,
 ) -> None:
     """Export the corrected wind of DAY as a pycontrails-ready NetCDF (default window: the day's windows)."""
@@ -126,7 +127,7 @@ def export(
     s = _settings(config)
     d = parse_day(day)
     info = day_info(s.paths, d)
-    field = fitted_field(s, d, gp_params(s, params), method, cross)
+    field = fitted_field(s, d, gp_params(s, params), method, cross, day_variances)
     t0 = pd.Timestamp(start, tz="UTC") if start else info.start
     t1 = pd.Timestamp(stop, tz="UTC") if stop else info.stop
     _print({"output": str(export_step(s, d, field, t0, t1, out))})
