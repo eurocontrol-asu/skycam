@@ -59,6 +59,21 @@ residual, corrected wind, residual sd and an information index. `export` writes 
 `DryAdvection` (pointwise, u / v / omega, 30 s steps) on that dataset, identical to the prototype's ERA5 advection
 when the residual is zero (checked to the metre).
 
+## Frozen configuration (tag `frozen-v1`)
+
+Chosen on the six dev days only, before any holdout observation was read:
+- GP: Matern 3/2, flow-following, per-aircraft airspeed bias, hyperparameters of the all-dev-days fit (`GPConfig`
+  defaults: 43.4 km, 230 m, 72.6 min, field sd 1.77, bias N(-0.19, 0.78^2), noise 0.59 m/s); `run` / `export`
+  re-estimate the three variances on the day's own aircraft data. Criterion declared beforehand: pooled
+  leave-one-day-out skill of evaluation A (Matern+flow 0.530 vs Matern 0.510, better on 4 of 6 days). Evaluation B on the
+  dev days does not separate the two (per-flight |drift|: flow better for 40 flights, worse for 47, Wilcoxon two-sided
+  p = 0.29).
+- Ridge baseline: 20 km / 100 m / 20 min, prior sd 4 m/s, observation sd 1.5 m/s (`RidgeConfig` defaults), chosen by
+  leave-one-aircraft-out error on the dev days; interior of the union of the two grids searched
+  (`20261113-eval-aircraft-4`, `20261113-eval-ridge`).
+- Truth source for evaluation B on new days: `evaluate/gvccs_raw.py` (validated against the prototype artefacts on the
+  dev days, see results).
+
 ## Layout
 
     src/skywind/

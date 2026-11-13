@@ -157,13 +157,14 @@ class GPConfig(BaseModel):
 
 
 class RidgeConfig(BaseModel):
-    """Prototype kernel-weighted ridge least-squares estimator (baseline)."""
+    """Prototype kernel-weighted ridge least-squares estimator (baseline). Defaults: the kernel and prior chosen by
+    leave-one-aircraft-out error on the six dev days (prototype kernel: 75 km / 500 m / 20 min, prior 2)."""
 
-    length_h_km: float = 75.0
-    length_z_m: float = 500.0
+    length_h_km: float = 20.0
+    length_z_m: float = 100.0
     length_t_min: float = 20.0
     sigma_obs: float = 1.5
-    sigma_prior: float = 2.0
+    sigma_prior: float = 4.0
     sigma_cross: float = 2.0
     use_cross: bool = False
 

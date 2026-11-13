@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from skywind.config import Settings
+from skywind.config import RidgeConfig, Settings
 from skywind.era5 import Era5
 from skywind.evaluate.aircraft import loao_frame, lodo_gp, lodo_ridge, score_predictions
 from skywind.evaluate.contrails import (
@@ -180,7 +180,8 @@ def run_ridge(
     grid_table = table
     out.mkdir(parents=True, exist_ok=True)
     grid_table.to_csv(out / "ridge_grid.csv", index=False)
-    proto = pd.concat([loao_frame(RidgeEstimator(sets[d], settings.ridge), sets[d], 0.0) for d in days])
+    prototype = RidgeConfig(length_h_km=75.0, length_z_m=500.0, length_t_min=20.0, sigma_prior=2.0)
+    proto = pd.concat([loao_frame(RidgeEstimator(sets[d], prototype), sets[d], 0.0) for d in days])
     out.mkdir(parents=True, exist_ok=True)
     preds.to_parquet(out / "loao_ridge.parquet", index=False)
     fits.to_csv(out / "fits_ridge.csv", index=False)
