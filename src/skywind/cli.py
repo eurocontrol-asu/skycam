@@ -20,6 +20,7 @@ evaluate_app = cyclopts.App(name="evaluate", help="Evaluations A (aircraft) and 
 app.command(evaluate_app)
 
 Config = Annotated[Path | None, cyclopts.Parameter(help="extra TOML configuration file")]
+Days = Annotated[list[str] | None, cyclopts.Parameter(consume_multiple=True, help="days (default: all available)")]
 
 
 def _settings(config: Path | None) -> Settings:
@@ -150,7 +151,7 @@ def run(day: str, windows: str | None = None, params: Path | None = None, acquir
 
 
 @evaluate_app.command
-def aircraft(*variant: str, days: list[str] | None = None, ridge: bool = True, diagnostics: bool = True,
+def aircraft(*variant: str, days: Days = None, ridge: bool = True, diagnostics: bool = True,
              transfer: bool = True, config: Config = None) -> None:
     """Evaluation A: leave-one-aircraft-out skill with leave-one-day-out hyperparameters, per VARIANT (default gp)."""
     from skywind.evaluate.campaign import aircraft_campaign
@@ -160,7 +161,7 @@ def aircraft(*variant: str, days: list[str] | None = None, ridge: bool = True, d
 
 
 @evaluate_app.command
-def contrails(aircraft_run: Path, *variant: str, days: list[str] | None = None, config: Config = None) -> None:
+def contrails(aircraft_run: Path, *variant: str, days: Days = None, config: Config = None) -> None:
     """Evaluation B: advection against the GVCCS calibration artefacts, with the LODO fits of AIRCRAFT_RUN."""
     from skywind.evaluate.campaign import contrail_campaign
 
