@@ -48,13 +48,18 @@ class Variant:
     day_refit: tuple[str, ...] = ()
 
 
+_VARIANCES = ("log_sigma_field", "log_sigma_bias", "log_sigma_noise")
 VARIANTS: dict[str, Variant] = {
     "gp": Variant(),
     "gp_nobias": Variant({"use_bias": False}),
     "gp_flow": Variant({"flow_following": True}),
     "gp_matern": Variant({"kernel": "matern32"}),
-    "gp_dayvar": Variant(day_refit=("log_sigma_field", "log_sigma_bias", "log_sigma_noise")),
+    "gp_dayvar": Variant(day_refit=_VARIANCES),
     "gp_cross": Variant(use_cross=True),
+    "gp_matern_dayvar": Variant({"kernel": "matern32"}, day_refit=_VARIANCES),
+    "gp_matern_flow": Variant({"kernel": "matern32", "flow_following": True}),
+    "gp_matern_cross": Variant({"kernel": "matern32"}, use_cross=True),
+    "gp_matern_nobias": Variant({"kernel": "matern32", "use_bias": False}),
     "gp_cross_strict": Variant(use_cross=True, strict_offsets=True),
 }
 
