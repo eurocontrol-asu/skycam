@@ -46,6 +46,7 @@ class Variant:
     use_cross: bool = False
     strict_offsets: bool = False
     day_refit: tuple[str, ...] = ()
+    reuse: str = ""  # variant whose fitted hyperparameters may be reused (then only ``day_refit`` is re-estimated)
 
 
 _VARIANCES = ("log_sigma_field", "log_sigma_bias", "log_sigma_noise")
@@ -63,6 +64,9 @@ VARIANTS: dict[str, Variant] = {
     "gp_matern_flow": Variant({"kernel": "matern32", "flow_following": True}),
     "gp_matern_dayvar": Variant({"kernel": "matern32"}, day_refit=_VARIANCES),
     "gp_matern_cross": Variant({"kernel": "matern32"}, use_cross=True),
+    "gp_matern_flow_dayvar": Variant(
+        {"kernel": "matern32", "flow_following": True}, day_refit=_VARIANCES, reuse="gp_matern_flow"
+    ),
 }
 
 
@@ -89,15 +93,20 @@ def _reuse_fits(
     variant: str,
     fits: pd.DataFrame,
     provider: Callable[[str], Mapping[str, ObsSet]],
-) -> pd.DataFrame:
-    """LOAO of each held-out day with hyperparameters already fitted without it (a previous run's fits table)."""
-    base = replace(GPParams.from_config(settings.gp), **VARIANTS[variant].overrides)
-    preds = []
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """LOAO of each held-out day with hyperparameters already fitted without it (a previous run's fits table);
+    returns the predictions and the hyperparameters actually used (after any ``day_refit``)."""
+    v = VARIANTS[variant]
+    base = replace(GPParams.from_config(settings.gp), **v.overrides)
+    preds, used = [], []
     for day in days:
         p = _fold_params(fits, day, base)
         sets = provider(day)
+        if v.day_refit:
+            p = fit_gp([sets[day]], p, only=v.day_refit, workers=settings.max_workers).params
+        used.append({"held_out": day, **p.as_dict()})
         preds.append(loao_frame(GPEstimator(sets[day], p, **_est_kwargs(settings)), sets[day], p.effective().mean_bias))
-    return pd.concat(preds, ignore_index=True)
+    return pd.concat(preds, ignore_index=True), pd.DataFrame(used)
 
 
 def run_aircraft(
@@ -109,11 +118,10 @@ def run_aircraft(
     v = VARIANTS[variant]
     log.info("evaluation A, variant %s", variant)
     provider = _provider(settings, days, v)
-    previous = _find(fits_from, f"fits_{variant}.csv")
+    previous = _find(fits_from, f"fits_{variant}.csv") or _find(fits_from, f"fits_{v.reuse}.csv" if v.reuse else "")
     out.mkdir(parents=True, exist_ok=True)
     if previous is not None:
-        fits = pd.read_csv(previous, dtype={"held_out": str})
-        preds = _reuse_fits(settings, days, variant, fits, provider)
+        preds, fits = _reuse_fits(settings, days, variant, pd.read_csv(previous, dtype={"held_out": str}), provider)
     else:
         base = replace(GPParams.from_config(settings.gp), **v.overrides)
         fit_kwargs: dict[str, Any] = {"workers": settings.max_workers}
