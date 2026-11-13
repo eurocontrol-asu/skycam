@@ -23,7 +23,7 @@ from skywind.evaluate.runner import (
 from skywind.field.gp import GPParams
 from skywind.runs import new_run_dir
 
-__all__ = ["aircraft_campaign", "contrail_campaign"]
+__all__ = ["aircraft_campaign", "contrail_campaign", "diagnostics_campaign"]
 
 
 def _ensure_calibration(settings: Settings, days: list[str]) -> None:
@@ -81,3 +81,10 @@ def contrail_campaign(
     res = run_contrails(settings, source, lodo_estimators(settings, aircraft_run, variants), out, days)
     pooled = res["drifts"][res["drifts"]["day"] == "pooled"]
     return {"run": str(out), "pooled_drift": pooled.to_dict("records")}
+
+
+def diagnostics_campaign(settings: Settings, params: GPParams, days: list[str] | None = None) -> dict[str, Any]:
+    """Hollingsworth-Lonnberg and Desroziers diagnostics of the given hyperparameters on the dev days."""
+    days = days or available_days(settings.paths, "dev")
+    out = new_run_dir(settings.paths.runs, "diagnostics", f"innovation diagnostics on {', '.join(days)} for {params}")
+    return {"run": str(out), **run_diagnostics(settings, days, params, out)}

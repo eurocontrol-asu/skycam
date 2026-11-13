@@ -204,6 +204,16 @@ def contrails(aircraft_run: Path, *variant: str, days: Days = None, config: Conf
 
 
 @evaluate_app.command
+def diagnostics(params: Path | None = None, days: Days = None, config: Config = None) -> None:
+    """Hollingsworth-Lonnberg covariances and Desroziers ratios for the GP hyperparameters (default: configured)."""
+    from skywind.evaluate.campaign import diagnostics_campaign
+    from skywind.pipeline import gp_params
+
+    s = _settings(config)
+    _print(diagnostics_campaign(s, gp_params(s, params), days))
+
+
+@evaluate_app.command
 def report(aircraft_run: Path | None = None, contrail_run: Path | None = None) -> None:
     """Markdown tables of an evaluation A and / or B run directory."""
     from skywind.evaluate.report import aircraft_report, contrail_report
