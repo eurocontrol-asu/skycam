@@ -13,7 +13,7 @@ import pandas as pd
 
 from skywind.config import RidgeConfig
 from skywind.field.data import ALONG, CROSS, ObsSet, Points, Prediction
-from skywind.field.kernels import correlation
+from skywind.field.kernels import correlation, factor_correlations
 from skywind.geo import FloatArray
 
 __all__ = ["RidgeEstimator"]
@@ -47,6 +47,35 @@ class RidgeEstimator:
         b1, b2 = W @ (a * ex), W @ (a * ey)
         det = A11 * A22 - A12**2
         return (A22 * b1 - A12 * b2) / det, (A11 * b2 - A12 * b1) / det, A22 / det, A11 / det, -A12 / det
+
+    def predict_grid(
+        self, times: FloatArray, z_m: FloatArray, xy_km: FloatArray, variance: npt.NDArray[np.bool_] | None = None
+    ) -> dict[str, FloatArray]:
+        """Same solution as :meth:`predict` on a grid (times x altitudes x horizontal nodes): the Gaussian weights are
+        separable, so every weighted sum is a matrix product per time. Arrays of shape (T, L, H)."""
+        lengths = (self.cfg.length_h_km, self.cfg.length_z_m, self.cfg.length_t_min)
+        ex, ey, a, iv = self.obs.e[:, 0], self.obs.e[:, 1], self.obs.y * self.inv_var, self.inv_var
+        vectors = (ex * ex * iv, ex * ey * iv, ey * ey * iv, a * ex, a * ey)
+        shape = (len(times), len(z_m), len(xy_km))
+        sums = np.zeros((5, *shape))
+        for i, t in enumerate(np.asarray(times, float)):
+            kh, kz, kt = factor_correlations(
+                np.asarray(xy_km, float), np.asarray(z_m, float), float(t), self.obs.X, lengths, "gaussian"
+            )
+            use = kt > 1e-12
+            for j, v in enumerate(vectors):
+                sums[j, i] = (kz[:, use] * (kt[use] * v[use])) @ kh[:, use].T
+        A11, A12, A22, b1, b2 = sums
+        A11 = A11 + 1 / self.prior_var
+        A22 = A22 + 1 / self.prior_var
+        det = A11 * A22 - A12**2
+        return {
+            "du": (A22 * b1 - A12 * b2) / det,
+            "dv": (A11 * b2 - A12 * b1) / det,
+            "var_u": A22 / det,
+            "var_v": A11 / det,
+            "cov_uv": -A12 / det,
+        }
 
     def predict(self, points: Points, variance: npt.NDArray[np.bool_] | None = None) -> Prediction:
         """Ridge solution at every point (``variance`` is accepted for interface compatibility; it is cheap here)."""
