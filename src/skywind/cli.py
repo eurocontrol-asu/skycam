@@ -203,6 +203,16 @@ def contrails(aircraft_run: Path, *variant: str, days: Days = None, config: Conf
     _print(contrail_campaign(s, aircraft_run, list(variant) or ["gp"], days))
 
 
+@evaluate_app.command
+def report(aircraft_run: Path | None = None, contrail_run: Path | None = None) -> None:
+    """Markdown tables of an evaluation A and / or B run directory."""
+    from skywind.evaluate.report import aircraft_report, contrail_report
+
+    parts = [aircraft_report(aircraft_run)] if aircraft_run else []
+    parts += [contrail_report(contrail_run)] if contrail_run else []
+    sys.stdout.write("\n".join(parts) + "\n")
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s", stream=sys.stderr)
     app()
