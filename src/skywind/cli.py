@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Annotated, Any
 
 import cyclopts
@@ -252,7 +252,7 @@ def ridge(
 
     s = _settings(config)
     d = days or available_days(s.paths, "dev")
-    grid = {
+    grid: dict[str, Sequence[float]] = {
         "length_h_km": length_h_km,
         "length_z_m": length_z_m,
         "length_t_min": length_t_min,
