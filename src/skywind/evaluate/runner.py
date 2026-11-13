@@ -50,17 +50,19 @@ class Variant:
 
 _VARIANCES = ("log_sigma_field", "log_sigma_bias", "log_sigma_noise")
 VARIANTS: dict[str, Variant] = {
-    "gp": Variant(),
-    "gp_nobias": Variant({"use_bias": False}),
-    "gp_flow": Variant({"flow_following": True}),
+    # Gaussian correlation (first family evaluated)
+    "gp": Variant({"kernel": "gaussian"}),
+    "gp_nobias": Variant({"kernel": "gaussian", "use_bias": False}),
+    "gp_flow": Variant({"kernel": "gaussian", "flow_following": True}),
+    "gp_dayvar": Variant({"kernel": "gaussian"}, day_refit=_VARIANCES),
+    "gp_cross": Variant({"kernel": "gaussian"}, use_cross=True),
+    "gp_cross_strict": Variant({"kernel": "gaussian"}, use_cross=True, strict_offsets=True),
+    # Matern 3/2 correlation (retained)
     "gp_matern": Variant({"kernel": "matern32"}),
-    "gp_dayvar": Variant(day_refit=_VARIANCES),
-    "gp_cross": Variant(use_cross=True),
-    "gp_matern_dayvar": Variant({"kernel": "matern32"}, day_refit=_VARIANCES),
-    "gp_matern_flow": Variant({"kernel": "matern32", "flow_following": True}),
-    "gp_matern_cross": Variant({"kernel": "matern32"}, use_cross=True),
     "gp_matern_nobias": Variant({"kernel": "matern32", "use_bias": False}),
-    "gp_cross_strict": Variant(use_cross=True, strict_offsets=True),
+    "gp_matern_flow": Variant({"kernel": "matern32", "flow_following": True}),
+    "gp_matern_dayvar": Variant({"kernel": "matern32"}, day_refit=_VARIANCES),
+    "gp_matern_cross": Variant({"kernel": "matern32"}, use_cross=True),
 }
 
 
@@ -81,23 +83,51 @@ def _provider(settings: Settings, days: Sequence[str], v: Variant) -> Callable[[
     return provide
 
 
-def run_aircraft(settings: Settings, days: Sequence[str], variant: str, out: Path) -> pd.DataFrame:
-    """Evaluation A for one GP variant: LODO fits, LOAO predictions and scores (+ all-days fit for reference)."""
+def _reuse_fits(
+    settings: Settings,
+    days: Sequence[str],
+    variant: str,
+    fits: pd.DataFrame,
+    provider: Callable[[str], Mapping[str, ObsSet]],
+) -> pd.DataFrame:
+    """LOAO of each held-out day with hyperparameters already fitted without it (a previous run's fits table)."""
+    base = replace(GPParams.from_config(settings.gp), **VARIANTS[variant].overrides)
+    preds = []
+    for day in days:
+        p = _fold_params(fits, day, base)
+        sets = provider(day)
+        preds.append(loao_frame(GPEstimator(sets[day], p, **_est_kwargs(settings)), sets[day], p.effective().mean_bias))
+    return pd.concat(preds, ignore_index=True)
+
+
+def run_aircraft(
+    settings: Settings, days: Sequence[str], variant: str, out: Path, fits_from: Sequence[Path] = ()
+) -> pd.DataFrame:
+    """Evaluation A for one GP variant: LODO fits, LOAO predictions and scores (+ all-days fit for reference).
+
+    If a run of ``fits_from`` holds ``fits_<variant>.csv``, its hyperparameters are reused (LOAO only)."""
     v = VARIANTS[variant]
     log.info("evaluation A, variant %s", variant)
-    base = replace(GPParams.from_config(settings.gp), **v.overrides)
     provider = _provider(settings, days, v)
-    fit_kwargs: dict[str, Any] = {"workers": settings.max_workers}
-    preds, fits = lodo_gp(days, provider, base, fit_kwargs, _est_kwargs(settings), v.day_refit)
-    sets = provider("")
-    all_fit = fit_gp([sets[d] for d in days], base, workers=settings.max_workers)
-    fits = pd.concat([fits, pd.DataFrame([{"held_out": "none (all days)", **all_fit.summary()}])], ignore_index=True)
-    scores = score_predictions(preds).assign(variant=variant)
+    previous = _find(fits_from, f"fits_{variant}.csv")
     out.mkdir(parents=True, exist_ok=True)
+    if previous is not None:
+        fits = pd.read_csv(previous, dtype={"held_out": str})
+        preds = _reuse_fits(settings, days, variant, fits, provider)
+    else:
+        base = replace(GPParams.from_config(settings.gp), **v.overrides)
+        fit_kwargs: dict[str, Any] = {"workers": settings.max_workers}
+        preds, fits = lodo_gp(days, provider, base, fit_kwargs, _est_kwargs(settings), v.day_refit)
+        sets = provider("")
+        all_fit = fit_gp([sets[d] for d in days], base, workers=settings.max_workers)
+        fits = pd.concat(
+            [fits, pd.DataFrame([{"held_out": "none (all days)", **all_fit.summary()}])], ignore_index=True
+        )
+        write_json(out / f"params_{variant}_alldays.json", all_fit.params.as_dict())
+    scores = score_predictions(preds).assign(variant=variant)
     preds.to_parquet(out / f"loao_{variant}.parquet", index=False)
     fits.to_csv(out / f"fits_{variant}.csv", index=False)
     scores.to_csv(out / f"scores_{variant}.csv", index=False)
-    write_json(out / f"params_{variant}_alldays.json", all_fit.params.as_dict())
     return scores
 
 

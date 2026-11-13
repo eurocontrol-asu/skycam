@@ -207,10 +207,10 @@ def fit_ridge(
 ) -> pd.DataFrame:
     """LOAO mean squared error of every grid combination pooled over ``obs_sets``; sorted, best first."""
     grid = grid or {
-        "length_h_km": [20, 40, 75, 150],
-        "length_z_m": [150, 300, 500, 1000],
-        "length_t_min": [5, 10, 20, 40],
-        "sigma_prior": [1.0, 2.0, 4.0],
+        "length_h_km": [10, 15, 20, 30, 50],
+        "length_z_m": [75, 100, 150, 250],
+        "length_t_min": [10, 20, 40],
+        "sigma_prior": [2.0, 4.0],
     }
     rows = []
     for combo in itertools.product(*grid.values()):

@@ -134,14 +134,14 @@ class GPConfig(BaseModel):
     Defaults are the values retained from the leave-one-day-out marginal-likelihood fit (see README).
     """
 
-    kernel: Literal["gaussian", "matern32"] = "gaussian"
-    length_h_km: float = 26.1
-    length_z_m: float = 196.0
-    length_t_min: float = 31.0
-    sigma_field: float = 1.58
-    sigma_bias: float = 0.96
-    mean_bias: float = -0.20
-    sigma_noise: float = 0.65
+    kernel: Literal["gaussian", "matern32"] = "matern32"
+    length_h_km: float = 42.4
+    length_z_m: float = 226.0
+    length_t_min: float = 47.9
+    sigma_field: float = 1.76
+    sigma_bias: float = 0.79
+    mean_bias: float = -0.19
+    sigma_noise: float = 0.58
     use_bias: bool = True
     flow_following: bool = False
     use_cross: bool = False
@@ -149,7 +149,7 @@ class GPConfig(BaseModel):
     sigma_cross_bias: float = 1.0
     cutoff: float = 3.0
     tile_minutes: float = 15.0
-    max_neighbours: int = 3000
+    max_neighbours: int = 6000
 
 
 class RidgeConfig(BaseModel):

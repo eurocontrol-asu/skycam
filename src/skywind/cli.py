@@ -185,13 +185,16 @@ def aircraft(
     ridge: bool = True,
     diagnostics: bool = True,
     transfer: bool = True,
+    fits_from: Annotated[list[Path] | None, cyclopts.Parameter(consume_multiple=True)] = None,
     config: Config = None,
 ) -> None:
-    """Evaluation A: leave-one-aircraft-out skill with leave-one-day-out hyperparameters, per VARIANT (default gp)."""
+    """Evaluation A: leave-one-aircraft-out skill with leave-one-day-out hyperparameters, per VARIANT (default gp).
+
+    ``--fits-from RUN...`` reuses the LODO hyperparameters of earlier runs where available (LOAO only)."""
     from skywind.evaluate.campaign import aircraft_campaign
 
     s = _settings(config)
-    _print(aircraft_campaign(s, list(variant) or ["gp"], days, ridge, diagnostics, transfer))
+    _print(aircraft_campaign(s, list(variant) or ["gp"], days, ridge, diagnostics, transfer, fits_from))
 
 
 @evaluate_app.command

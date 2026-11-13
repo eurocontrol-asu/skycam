@@ -41,6 +41,7 @@ def aircraft_campaign(
     ridge: bool = True,
     diagnostics: bool = True,
     transfer: bool = True,
+    fits_from: list[Path] | None = None,
 ) -> dict[str, Any]:
     days = days or available_days(settings.paths, "dev")  # holdout days are never used for tuning
     unknown = [v for v in variants if v not in VARIANTS]
@@ -54,7 +55,7 @@ def aircraft_campaign(
     )
     if any(VARIANTS[v].use_cross for v in variants):
         _ensure_calibration(settings, days)
-    scores = [run_aircraft(settings, days, v, out) for v in variants]
+    scores = [run_aircraft(settings, days, v, out, fits_from or []) for v in variants]
     if ridge:
         scores.append(run_ridge(settings, days, out))
     if transfer:
