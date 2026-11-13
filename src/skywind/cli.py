@@ -236,6 +236,33 @@ def merge_contrails(*run: Path, config: Config = None) -> None:
 
 
 @evaluate_app.command
+def ridge(
+    length_h_km: Annotated[list[float], cyclopts.Parameter(consume_multiple=True)],
+    length_z_m: Annotated[list[float], cyclopts.Parameter(consume_multiple=True)],
+    length_t_min: Annotated[list[float], cyclopts.Parameter(consume_multiple=True)],
+    sigma_prior: Annotated[list[float], cyclopts.Parameter(consume_multiple=True)],
+    days: Days = None,
+    config: Config = None,
+) -> None:
+    """Ridge baseline: leave-one-day-out grid search of its kernel on the dev days (grid given explicitly)."""
+    from skywind.days import available_days
+    from skywind.evaluate.runner import run_ridge
+    from skywind.runs import new_run_dir
+
+    s = _settings(config)
+    d = days or available_days(s.paths, "dev")
+    grid = {
+        "length_h_km": length_h_km,
+        "length_z_m": length_z_m,
+        "length_t_min": length_t_min,
+        "sigma_prior": sigma_prior,
+    }
+    out = new_run_dir(s.paths.runs, "eval-ridge", f"ridge LODO grid search on {', '.join(d)}: {grid}")
+    scores = run_ridge(s, d, out, grid)
+    _print({"run": str(out), "pooled": scores[scores["day"] == "pooled"].to_dict("records")})
+
+
+@evaluate_app.command
 def holdout_aircraft(days: Days = None, config: Config = None) -> None:
     """Evaluation A on the holdout days with the frozen configuration (no hyperparameter fitted on them)."""
     from skywind.evaluate.campaign import holdout_aircraft_campaign
