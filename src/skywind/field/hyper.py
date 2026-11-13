@@ -155,11 +155,14 @@ def fit_gp(
     max_block: int = 2500,
     workers: int = 8,
     maxiter: int = 60,
+    only: Sequence[str] | None = None,
 ) -> FitResult:
-    """Maximum composite marginal likelihood over the blocks of all ``obs_sets`` (e.g. one per training day)."""
+    """Maximum composite marginal likelihood over the blocks of all ``obs_sets`` (e.g. one per training day).
+
+    ``only`` restricts the optimisation to a subset of the free parameters (the others stay at ``base``)."""
     blocks = [b for o in obs_sets for b in make_blocks(o, block_minutes, max_block)]
     has_cross = any(bool((b.kind == CROSS).any()) for b in blocks)
-    names = free_parameters(base, has_cross)
+    names = [n for n in free_parameters(base, has_cross) if only is None or n in only]
     bounds = [BOUNDS[n] for n in names]
     counter = {"n": 0}
     order = np.argsort([-len(b) for b in blocks])

@@ -68,7 +68,7 @@ def aircraft_campaign(
 
 
 def contrail_campaign(
-    settings: Settings, aircraft_run: Path, variants: list[str], days: list[str] | None = None
+    settings: Settings, aircraft_runs: list[Path], variants: list[str], days: list[str] | None = None
 ) -> dict[str, Any]:
     source = CalibArtefacts(settings)
     days = days or source.days()
@@ -76,9 +76,9 @@ def contrail_campaign(
         settings.paths.runs,
         "eval-contrails",
         "evaluation B (advection vs GVCCS calibration artefacts) "
-        f"on {', '.join(days)}; variants {', '.join(variants)}; hyperparameters from {aircraft_run}",
+        f"on {', '.join(days)}; variants {', '.join(variants)}; hyperparameters from {', '.join(map(str, aircraft_runs))}",
     )
-    res = run_contrails(settings, source, lodo_estimators(settings, aircraft_run, variants), out, days)
+    res = run_contrails(settings, source, lodo_estimators(settings, aircraft_runs, variants), out, days)
     pooled = res["drifts"][res["drifts"]["day"] == "pooled"]
     return {"run": str(out), "pooled_drift": pooled.to_dict("records")}
 

@@ -45,6 +45,7 @@ class Variant:
     overrides: dict[str, Any] = field(default_factory=dict)
     use_cross: bool = False
     strict_offsets: bool = False
+    day_refit: tuple[str, ...] = ()
 
 
 VARIANTS: dict[str, Variant] = {
@@ -52,6 +53,7 @@ VARIANTS: dict[str, Variant] = {
     "gp_nobias": Variant({"use_bias": False}),
     "gp_flow": Variant({"flow_following": True}),
     "gp_matern": Variant({"kernel": "matern32"}),
+    "gp_dayvar": Variant(day_refit=("log_sigma_field", "log_sigma_bias", "log_sigma_noise")),
     "gp_cross": Variant(use_cross=True),
     "gp_cross_strict": Variant(use_cross=True, strict_offsets=True),
 }
@@ -81,7 +83,7 @@ def run_aircraft(settings: Settings, days: Sequence[str], variant: str, out: Pat
     base = replace(GPParams.from_config(settings.gp), **v.overrides)
     provider = _provider(settings, days, v)
     fit_kwargs: dict[str, Any] = {"workers": settings.max_workers}
-    preds, fits = lodo_gp(days, provider, base, fit_kwargs, _est_kwargs(settings))
+    preds, fits = lodo_gp(days, provider, base, fit_kwargs, _est_kwargs(settings), v.day_refit)
     sets = provider("")
     all_fit = fit_gp([sets[d] for d in days], base, workers=settings.max_workers)
     fits = pd.concat([fits, pd.DataFrame([{"held_out": "none (all days)", **all_fit.summary()}])], ignore_index=True)
@@ -259,21 +261,30 @@ def _fold_params(fits: pd.DataFrame, day: str, base: GPParams) -> GPParams:
     return replace(base, **{k: row[k] for k in base.as_dict() if k in row and pd.notna(row[k])})
 
 
+def _find(runs: Sequence[Path], name: str) -> Path | None:
+    return next((r / name for r in runs if (r / name).is_file()), None)
+
+
 def lodo_estimators(
-    settings: Settings, aircraft_run: Path, variants: Sequence[str], with_ridge: bool = True
+    settings: Settings, aircraft_runs: Sequence[Path], variants: Sequence[str], with_ridge: bool = True
 ) -> Callable[[str], dict[str, ResidualEstimator]]:
-    """Per day, the estimators of each variant with the hyperparameters fitted WITHOUT that day (evaluation A run)."""
+    """Per day, the estimators of each variant with the hyperparameters fitted WITHOUT that day (evaluation A runs;
+    the first run holding ``fits_<variant>.csv`` is used)."""
+    missing = [v for v in variants if _find(aircraft_runs, f"fits_{v}.csv") is None]
+    if missing:
+        raise FileNotFoundError(f"no fits for {missing} in {list(map(str, aircraft_runs))}")
+    ridge_fits = _find(aircraft_runs, "fits_ridge.csv") if with_ridge else None
 
     def build(day: str) -> dict[str, ResidualEstimator]:
         out: dict[str, ResidualEstimator] = {}
         for name in variants:
             v = VARIANTS[name]
             base = replace(GPParams.from_config(settings.gp), **v.overrides)
-            p = _fold_params(pd.read_csv(aircraft_run / f"fits_{name}.csv"), day, base)
+            p = _fold_params(pd.read_csv(_find(aircraft_runs, f"fits_{name}.csv")), day, base)  # type: ignore[arg-type]
             obs = observation_set(settings, day, v.use_cross, (day,) if v.strict_offsets else ())
             out[name] = GPEstimator(obs, p, **_est_kwargs(settings))
-        if with_ridge and (aircraft_run / "fits_ridge.csv").is_file():
-            fits = pd.read_csv(aircraft_run / "fits_ridge.csv", dtype={"held_out": str})
+        if ridge_fits is not None:
+            fits = pd.read_csv(ridge_fits, dtype={"held_out": str})
             row = fits[fits["held_out"] == day].iloc[0].to_dict()
             cfg = settings.ridge.model_copy(
                 update={k: float(row[k]) for k in ("length_h_km", "length_z_m", "length_t_min", "sigma_prior")}

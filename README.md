@@ -101,7 +101,7 @@ the cross-heading option), `fit DAY... --out params.json`, `export DAY [--params
 Evaluations (dev days by default; holdout days are never used for tuning):
 
     uv run skywind evaluate aircraft gp gp_nobias gp_flow gp_matern gp_cross gp_cross_strict
-    uv run skywind evaluate contrails data/runs/20261113-skywind/<aircraft run> gp gp_flow gp_cross
+    uv run skywind evaluate contrails gp gp_flow gp_cross ridge --aircraft-runs data/runs/20261113-skywind/<aircraft run>
 
 Library use:
 

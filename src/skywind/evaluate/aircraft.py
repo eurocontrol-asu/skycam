@@ -80,11 +80,13 @@ def lodo_gp(
     base: GPParams,
     fit_kwargs: dict[str, Any] | None = None,
     est_kwargs: dict[str, Any] | None = None,
+    day_refit: Sequence[str] = (),
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """GP hyperparameters fitted (marginal likelihood) on all days but one, LOAO on the held-out day.
 
     ``obs_provider(held_out)`` returns the observation sets of every day for that fold (so that a calibration table can
-    exclude the held-out day).
+    exclude the held-out day). ``day_refit`` names parameters (e.g. variances) then re-estimated by marginal likelihood
+    on the held-out day's own aircraft data, the length scales staying those of the other days.
     """
     fk, ek = fit_kwargs or {}, est_kwargs or {}
     preds, fits = [], []
@@ -92,6 +94,8 @@ def lodo_gp(
         sets = obs_provider(day)
         log.info("LODO fold: held-out day %s", day)
         res = fit_gp([sets[d] for d in days if d != day], base, **fk)
+        if day_refit:
+            res = fit_gp([sets[day]], res.params, only=day_refit, **fk)
         fits.append({"held_out": day, **res.summary()})
         preds.append(loao_frame(GPEstimator(sets[day], res.params, **ek), sets[day], res.params.effective().mean_bias))
     return pd.concat(preds, ignore_index=True), pd.DataFrame(fits)
