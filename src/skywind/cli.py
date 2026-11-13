@@ -236,6 +236,14 @@ def merge_contrails(*run: Path, config: Config = None) -> None:
 
 
 @evaluate_app.command
+def holdout_aircraft(days: Days = None, config: Config = None) -> None:
+    """Evaluation A on the holdout days with the frozen configuration (no hyperparameter fitted on them)."""
+    from skywind.evaluate.campaign import holdout_aircraft_campaign
+
+    _print(holdout_aircraft_campaign(_settings(config), days))
+
+
+@evaluate_app.command
 def validate_truth(days: Days = None, config: Config = None) -> None:
     """Compare the raw-GVCCS truth source with the prototype calibration artefacts (ERA5 drift per flight)."""
     from skywind.evaluate.gvccs_calib import CalibArtefacts

@@ -22,10 +22,10 @@ from skywind.evaluate.runner import (
     run_ridge,
     run_transfer,
 )
-from skywind.field.gp import GPParams
-from skywind.runs import new_run_dir
+from skywind.field.gp import GPEstimator, GPParams
+from skywind.runs import new_run_dir, write_json
 
-__all__ = ["aircraft_campaign", "contrail_campaign", "diagnostics_campaign"]
+__all__ = ["aircraft_campaign", "contrail_campaign", "diagnostics_campaign", "holdout_aircraft_campaign"]
 
 
 def _ensure_calibration(settings: Settings, days: list[str]) -> None:
@@ -103,3 +103,46 @@ def diagnostics_campaign(settings: Settings, params: GPParams, days: list[str] |
     days = days or available_days(settings.paths, "dev")
     out = new_run_dir(settings.paths.runs, "diagnostics", f"innovation diagnostics on {', '.join(days)} for {params}")
     return {"run": str(out), **run_diagnostics(settings, days, params, out)}
+
+
+def holdout_aircraft_campaign(settings: Settings, days: list[str] | None = None) -> dict[str, Any]:
+    """Evaluation A on held-out days with the frozen configuration, no hyperparameter fitted on them:
+    ``gp_frozen`` (shipped GP hyperparameters as is), ``gp_frozen_dayvar`` (shipped procedure: variances re-estimated
+    on the day's own aircraft data) and ``ridge_dev`` (ridge with its dev-fitted kernel)."""
+    from skywind.evaluate.aircraft import loao_frame, score_predictions
+    from skywind.field.hyper import fit_gp
+    from skywind.field.ridge import RidgeEstimator
+    from skywind.pipeline import DAY_VARIANCES, decode_step, observation_set, observe_step
+
+    days = days or available_days(settings.paths, "holdout")
+    out = new_run_dir(
+        settings.paths.runs,
+        "holdout-aircraft",
+        f"evaluation A on holdout days {', '.join(days)} with the frozen configuration (no refit)",
+    )
+    p = GPParams.from_config(settings.gp)
+    kw = {
+        "cutoff": settings.gp.cutoff,
+        "tile_minutes": settings.gp.tile_minutes,
+        "max_neighbours": settings.gp.max_neighbours,
+    }
+    preds: dict[str, list[pd.DataFrame]] = {"gp_frozen": [], "gp_frozen_dayvar": [], "ridge_dev": []}
+    for day in days:
+        if not settings.paths.observations(day).is_file():
+            decode_step(settings, day)
+            observe_step(settings, day)
+        obs = observation_set(settings, day)
+        preds["gp_frozen"].append(loao_frame(GPEstimator(obs, p, **kw), obs, p.effective().mean_bias))
+        pd_ = fit_gp([obs], p, only=DAY_VARIANCES, workers=settings.max_workers).params
+        preds["gp_frozen_dayvar"].append(loao_frame(GPEstimator(obs, pd_, **kw), obs, pd_.effective().mean_bias))
+        preds["ridge_dev"].append(loao_frame(RidgeEstimator(obs, settings.ridge), obs, 0.0))
+    scores = []
+    for name, frames in preds.items():
+        table = pd.concat(frames, ignore_index=True)
+        table.to_parquet(out / f"loao_{name}.parquet", index=False)
+        scores.append(score_predictions(table).assign(variant=name))
+    summary = pd.concat(scores, ignore_index=True)
+    summary.to_csv(out / "summary.csv", index=False)
+    write_json(out / "frozen_config.json", settings.model_dump(mode="json"))
+    pooled = summary[summary["day"] == "pooled"][["variant", "rmse_era5", "rmse_field", "skill", "z_sd", "cover95"]]
+    return {"run": str(out), "pooled": pooled.to_dict("records")}
