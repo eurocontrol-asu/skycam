@@ -21,7 +21,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-opensky = ["pyopensky>=2.10"]
+opensky = [
+    "pyopensky>=2.16,<2.17",
+]
 
 [project.scripts]
 skywind = "skywind.cli:main"
