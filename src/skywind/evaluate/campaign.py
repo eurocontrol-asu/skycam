@@ -76,7 +76,8 @@ def contrail_campaign(
         settings.paths.runs,
         "eval-contrails",
         "evaluation B (advection vs GVCCS calibration artefacts) "
-        f"on {', '.join(days)}; variants {', '.join(variants)}; hyperparameters from {', '.join(map(str, aircraft_runs))}",
+        f"on {', '.join(days)}; variants {', '.join(variants)}; "
+        f"hyperparameters from {', '.join(map(str, aircraft_runs))}",
     )
     res = run_contrails(settings, source, lodo_estimators(settings, aircraft_runs, variants), out, days)
     pooled = res["drifts"][res["drifts"]["day"] == "pooled"]
