@@ -46,10 +46,16 @@ __all__ = [
 ]
 
 
-def state_vectors(settings: Settings, day: str) -> tuple[pd.DataFrame, dict[str, float]]:
-    """Sanitised state vectors of the day with position-derived track."""
+def state_vectors(settings: Settings, day: str, clean: bool = True) -> tuple[pd.DataFrame, dict[str, float]]:
+    """State vectors of the day with position-derived track; ``clean`` applies the label-free sanitiser.
+
+    Decoding uses the raw extract (register identification and the receiver clock check compare replies with the
+    reported speeds and the position track, as validated in the prototype); emission points use the sanitised one.
+    """
     sv = load_state_vectors(settings.paths.opensky(day))
-    sv, report = sanitise(sv)
+    report: dict[str, float] = {}
+    if clean:
+        sv, report = sanitise(sv)
     return add_position_track(sv), report
 
 
@@ -58,7 +64,7 @@ def decode_step(settings: Settings, day: str) -> dict[str, Any]:
     paths = settings.paths
     raw = pd.read_parquet(paths.commb(day))
     decoded = decode_payloads(raw)
-    sv, report = state_vectors(settings, day)
+    sv, report = state_vectors(settings, day, clean=False)
     msgs, receivers, stats = decode_day(decoded, sv, settings.decode, settings.site.min_alt_ft)
     out = paths.decoded(day)
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -16,6 +16,7 @@ def test_export_grid_contains_native_levels_and_finer_times(era5_ds: xr.Dataset)
     )
     assert {200.0, 250.0, 260.0}.issubset(set(g["level"]))
     assert len(g["time"]) == 9 and np.all(np.abs(g["latitude"] - 48.6005) <= 1.0)
+    assert np.allclose(np.diff(g["longitude"]), 0.125)  # ERA5 0.25 deg split twice
 
 
 def test_exported_dataset_has_corrected_winds_and_uncertainty(era5_ds: xr.Dataset) -> None:

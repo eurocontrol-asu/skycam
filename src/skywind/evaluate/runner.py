@@ -3,6 +3,7 @@ directory. Estimator variants are named; every variant is evaluated with the sam
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -31,6 +32,8 @@ from skywind.field.ridge import RidgeEstimator
 from skywind.pipeline import advect_step, calibrate_step, export_step, observation_set
 from skywind.runs import write_json
 from skywind.windfield import CorrectedWind, ResidualEstimator
+
+log = logging.getLogger(__name__)
 
 __all__ = ["VARIANTS", "Variant", "run_aircraft", "run_calibration", "run_contrails", "run_diagnostics", "run_ridge"]
 
@@ -74,6 +77,7 @@ def _provider(settings: Settings, days: Sequence[str], v: Variant) -> Callable[[
 def run_aircraft(settings: Settings, days: Sequence[str], variant: str, out: Path) -> pd.DataFrame:
     """Evaluation A for one GP variant: LODO fits, LOAO predictions and scores (+ all-days fit for reference)."""
     v = VARIANTS[variant]
+    log.info("evaluation A, variant %s", variant)
     base = replace(GPParams.from_config(settings.gp), **v.overrides)
     provider = _provider(settings, days, v)
     fit_kwargs: dict[str, Any] = {"workers": settings.max_workers}
@@ -206,6 +210,7 @@ def run_contrails(
     errors: dict[str, list[pd.DataFrame]] = {}
     stds: dict[str, list[pd.DataFrame]] = {}
     for day in days or source.days():
+        log.info("evaluation B, day %s", day)
         truth = source.load(day)
         res = _contrail_day(settings, truth, estimators(day), out, Era5.from_file(settings.paths.era5(day)))
         for k, e in res["errors"].items():

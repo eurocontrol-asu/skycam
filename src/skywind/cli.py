@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Annotated, Any
@@ -203,6 +204,7 @@ def contrails(aircraft_run: Path, *variant: str, days: Days = None, config: Conf
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s", stream=sys.stderr)
     app()
 
 

@@ -9,6 +9,7 @@ day are fitted on the other days only.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from typing import Any, Protocol
@@ -21,6 +22,8 @@ from skywind.field.data import ObsSet
 from skywind.field.gp import GPEstimator, GPParams
 from skywind.field.hyper import fit_gp, fit_ridge
 from skywind.field.ridge import RidgeEstimator
+
+log = logging.getLogger(__name__)
 
 __all__ = ["loao_frame", "lodo_gp", "lodo_ridge", "score_predictions"]
 
@@ -87,6 +90,7 @@ def lodo_gp(
     preds, fits = [], []
     for day in days:
         sets = obs_provider(day)
+        log.info("LODO fold: held-out day %s", day)
         res = fit_gp([sets[d] for d in days if d != day], base, **fk)
         fits.append({"held_out": day, **res.summary()})
         preds.append(loao_frame(GPEstimator(sets[day], res.params, **ek), sets[day], res.params.effective().mean_bias))

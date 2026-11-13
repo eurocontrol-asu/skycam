@@ -10,6 +10,7 @@ Ridge baseline: grid search of the leave-one-aircraft-out mean squared error of 
 from __future__ import annotations
 
 import itertools
+import logging
 import math
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
@@ -27,6 +28,8 @@ from skywind.field.data import ALONG, CROSS, ObsSet
 from skywind.field.gp import GPParams, centred, covariance_and_grads
 from skywind.field.ridge import RidgeEstimator
 from skywind.geo import FloatArray
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     "BOUNDS",
@@ -172,6 +175,13 @@ def fit_gp(
 
         x0 = np.clip(vector_from_params(base, names), [b[0] for b in bounds], [b[1] for b in bounds])
         opt = minimize(objective, x0, jac=True, method="L-BFGS-B", bounds=bounds, options={"maxiter": maxiter})
+    log.info(
+        "fit: %d blocks, %d evaluations, loglik %.1f, %s",
+        len(blocks),
+        counter["n"],
+        -float(opt.fun),
+        params_from_vector(base, names, opt.x),
+    )
     return FitResult(
         params_from_vector(base, names, opt.x),
         -float(opt.fun),

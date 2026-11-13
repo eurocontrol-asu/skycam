@@ -7,6 +7,7 @@ residual and its standard deviation are kept alongside.
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 from typing import Any
 
@@ -33,11 +34,12 @@ CF_NAMES = {
 def export_grid(
     era5: xr.Dataset, site: Site, cfg: ExportConfig, start: pd.Timestamp, stop: pd.Timestamp
 ) -> dict[str, np.ndarray]:
-    """ERA5 latitudes / longitudes within ``half_width_deg`` of the site, ERA5 levels plus a regular ``level_step_hpa``
-    grid, and times every ``time_step_min`` aligned on the hour, covering [start - pad_before, stop + pad_after]."""
+    """ERA5 latitudes / longitudes within ``half_width_deg`` of the site (each interval split ``horizontal_refine``
+    times, so that the residual's horizontal scale is resolved), ERA5 levels plus a regular ``level_step_hpa`` grid,
+    and times every ``time_step_min`` aligned on the hour, covering [start - pad_before, stop + pad_after]."""
     lat, lon = era5["latitude"].values, era5["longitude"].values
-    lat = lat[np.abs(lat - site.lat) <= cfg.half_width_deg + 1e-9]
-    lon = lon[np.abs(lon - site.lon) <= cfg.half_width_deg + 1e-9]
+    lat = _refine(lat[np.abs(lat - site.lat) <= cfg.half_width_deg + 1e-9], cfg.horizontal_refine)
+    lon = _refine(lon[np.abs(lon - site.lon) <= cfg.half_width_deg + 1e-9], cfg.horizontal_refine)
     regular = np.arange(cfg.min_level_hpa, cfg.max_level_hpa + 1e-9, cfg.level_step_hpa)
     native = era5["level"].values.astype(float)
     levels = np.unique(np.concatenate([regular, native[(native >= cfg.min_level_hpa) & (native <= cfg.max_level_hpa)]]))
@@ -48,10 +50,20 @@ def export_grid(
     return {"latitude": lat, "longitude": lon, "level": levels, "time": times}
 
 
+def _refine(nodes: np.ndarray, factor: int) -> np.ndarray:
+    nodes = np.sort(nodes.astype(float))
+    if factor <= 1 or len(nodes) < 2:
+        return nodes
+    fine = [np.linspace(a, b, factor, endpoint=False) for a, b in itertools.pairwise(nodes)]
+    return np.round(np.concatenate([*fine, nodes[-1:]]), 6)
+
+
 def era5_on_grid(era5: xr.Dataset, grid: dict[str, np.ndarray]) -> xr.Dataset:
-    """ERA5 linearly interpolated (time, pressure) onto the export grid; horizontal nodes are ERA5 nodes."""
-    ds = era5.sel(latitude=grid["latitude"], longitude=grid["longitude"])
-    return ds.interp(level=grid["level"], time=grid["time"], method="linear")
+    """ERA5 linearly interpolated (time, pressure, and bilinearly between ERA5 nodes) onto the export grid; the result
+    equals ERA5 at its own nodes and is the same piecewise-linear field elsewhere."""
+    return era5.interp(
+        latitude=grid["latitude"], longitude=grid["longitude"], level=grid["level"], time=grid["time"], method="linear"
+    )
 
 
 def residual_dataset(ds: xr.Dataset, estimator: ResidualEstimator, site: Site) -> xr.Dataset:
