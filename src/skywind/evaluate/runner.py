@@ -39,6 +39,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "VARIANTS",
     "Variant",
+    "frozen_estimators",
     "merge_contrail_runs",
     "run_aircraft",
     "run_calibration",
@@ -378,3 +379,21 @@ def merge_contrail_runs(runs: Sequence[Path], out: Path) -> dict[str, pd.DataFra
     return summarise_contrails(
         {k: pd.concat(v) for k, v in errors.items()}, {k: pd.concat(v) for k, v in stds.items()}, out
     )
+
+
+def frozen_estimators(settings: Settings, day_variances: bool = True) -> Callable[[str], dict[str, ResidualEstimator]]:
+    """Per day, the frozen (shipped) estimators, nothing fitted on the evaluated day except, with ``day_variances``,
+    the three variances re-estimated on its own aircraft data as ``skywind run`` does."""
+    from skywind.pipeline import DAY_VARIANCES
+
+    def build(day: str) -> dict[str, ResidualEstimator]:
+        obs = observation_set(settings, day)
+        p = GPParams.from_config(settings.gp)
+        if day_variances:
+            p = fit_gp([obs], p, only=DAY_VARIANCES, workers=settings.max_workers).params
+        return {
+            "gp_frozen": GPEstimator(obs, p, **_est_kwargs(settings)),
+            "ridge_dev": RidgeEstimator(obs, settings.ridge),
+        }
+
+    return build

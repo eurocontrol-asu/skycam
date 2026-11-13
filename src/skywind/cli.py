@@ -202,16 +202,17 @@ def aircraft(
 @evaluate_app.command
 def contrails(
     *variant: str,
-    aircraft_runs: Annotated[list[Path], cyclopts.Parameter(consume_multiple=True)],
+    aircraft_runs: Annotated[list[Path] | None, cyclopts.Parameter(consume_multiple=True)] = None,
     days: Days = None,
     truth: str = "raw",
     config: Config = None,
 ) -> None:
-    """Evaluation B: advection vs the GVCCS calibration artefacts, with the LODO fits of the evaluation A runs."""
+    """Evaluation B vs GVCCS labels. With ``--aircraft-runs``: the VARIANTs with their leave-one-day-out
+    fits; without: the frozen estimators (gp_frozen, ridge_dev)."""
     from skywind.evaluate.campaign import contrail_campaign
 
     s = _settings(config)
-    _print(contrail_campaign(s, aircraft_runs, list(variant) or ["gp"], days, truth))
+    _print(contrail_campaign(s, aircraft_runs or [], list(variant), days, truth))
 
 
 @evaluate_app.command

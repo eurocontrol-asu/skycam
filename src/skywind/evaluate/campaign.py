@@ -14,6 +14,7 @@ from skywind.evaluate.gvccs_calib import CalibArtefacts
 from skywind.evaluate.gvccs_raw import GvccsRaw
 from skywind.evaluate.runner import (
     VARIANTS,
+    frozen_estimators,
     lodo_estimators,
     run_aircraft,
     run_calibration,
@@ -87,13 +88,12 @@ def contrail_campaign(
         f"on {', '.join(days)}; variants {', '.join(variants)}; "
         f"hyperparameters from {', '.join(map(str, aircraft_runs))}",
     )
-    res = run_contrails(
-        settings,
-        source,
-        lodo_estimators(settings, aircraft_runs, [v for v in variants if v != "ridge"], "ridge" in variants),
-        out,
-        days,
+    estimators = (
+        frozen_estimators(settings)
+        if not aircraft_runs
+        else lodo_estimators(settings, aircraft_runs, [v for v in variants if v != "ridge"], "ridge" in variants)
     )
+    res = run_contrails(settings, source, estimators, out, days)
     pooled = res["drifts"][res["drifts"]["day"] == "pooled"]
     return {"run": str(out), "pooled_drift": pooled.to_dict("records")}
 
