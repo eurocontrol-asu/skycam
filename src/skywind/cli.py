@@ -299,6 +299,33 @@ def validate_truth(days: Days = None, config: Config = None) -> None:
 
 
 @evaluate_app.command
+def figures(
+    dev_aircraft: Path | None = None,
+    holdout_aircraft: Path | None = None,
+    dev_contrails: Path | None = None,
+    holdout_contrails: Path | None = None,
+    diagnostics: Path | None = None,
+    overlays: int = 4,
+    config: Config = None,
+) -> None:
+    """Regenerate the figures from evaluation run directories (CSV / parquet outputs only)."""
+    from skywind.evaluate.figures import make_figures
+    from skywind.runs import new_run_dir
+
+    s = _settings(config)
+    given = {
+        "dev_aircraft": dev_aircraft,
+        "holdout_aircraft": holdout_aircraft,
+        "dev_contrails": dev_contrails,
+        "holdout_contrails": holdout_contrails,
+        "diagnostics": diagnostics,
+    }
+    runs = {k: v for k, v in given.items() if v is not None}
+    out = new_run_dir(s.paths.runs, "figures", "figures from " + ", ".join(f"{k}={v}" for k, v in runs.items()))
+    _print({"run": str(out), "figures": [str(p) for p in make_figures(s, runs, out, overlays)]})
+
+
+@evaluate_app.command
 def report(aircraft_run: Path | None = None, contrail_run: Path | None = None) -> None:
     """Markdown tables of an evaluation A and / or B run directory."""
     from skywind.evaluate.report import aircraft_report, contrail_report

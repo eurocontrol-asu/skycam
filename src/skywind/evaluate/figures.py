@@ -16,7 +16,18 @@ import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
 
-__all__ = ["distance_vs_age", "drift_scatter", "hl_covariance", "overlay", "residual_map", "skill_per_day"]
+from skywind.config import Settings
+
+__all__ = [
+    "distance_vs_age",
+    "drift_scatter",
+    "hl_covariance",
+    "make_figures",
+    "overlay",
+    "overlay_flight",
+    "residual_map",
+    "skill_per_day",
+]
 
 _COLORS = {
     "era5": "#7f7f7f",
@@ -198,3 +209,99 @@ def overlay(
     ax.set_title(title, fontsize=9)
     ax.set_axis_off()
     return _save(fig, out)
+
+
+def _scores(run: Path, keep: Sequence[str], set_name: str) -> pd.DataFrame:
+    t = pd.read_csv(run / "summary.csv", dtype={"day": str})
+    return t[t["variant"].isin(keep)].assign(set=set_name)
+
+
+def _best_flights(errors: pd.DataFrame, n: int) -> list[tuple[str, str]]:
+    """Flights with the most annotated points (clear, long contrails)."""
+    c = errors.groupby(["day", "flight"]).size().sort_values(ascending=False)
+    return [(str(d), str(f)) for d, f in c.index[:n]]
+
+
+def overlay_flight(settings: Settings, contrail_run: Path, day: str, flight: str, method: str, out: Path) -> Path:
+    """Camera frame (frame with the most annotated points of the flight) with the annotation, the ERA5-advected and
+    the ``method``-advected emission points of that flight, projected with the camera geometry."""
+    from skywind.evaluate.gvccs_raw import GvccsRaw
+    from skywind.geo import FT, isa_altitude_m
+    from skywind.gvccs.dataset import load_day
+    from skywind.pipeline import state_vectors
+
+    src = GvccsRaw(settings)
+    g = load_day(src.root, day)
+    errs = pd.read_parquet(contrail_run / f"errors_{method}.parquet")
+    e = errs[(errs["day"].astype(str) == day) & (errs["flight"].astype(str) == flight)]
+    t = pd.Timestamp(str(e.groupby("time").size().idxmax()))
+    fid = str(e["flight_id"].iloc[0])
+    sv, _ = state_vectors(settings, day)
+    f = sv[sv["flight_id"] == fid]
+    gap = float(((f["geoaltitude"] - f["altitude"]) * FT).median())  # GNSS - barometric, as for the truth lines
+    lines = {}
+    for name in ("era5", method):
+        adv = pd.read_parquet(contrail_run / "advected" / f"{name}_{day}.parquet")
+        a = adv[(adv["flight_id"] == fid) & (adv["time"] == t)].sort_values("waypoint")
+        h = isa_altitude_m(a["level"].to_numpy() * 100) + (gap if np.isfinite(gap) else 0.0)
+        az, zen = src.camera.az_zen(a["latitude"].to_numpy(), a["longitude"].to_numpy(), h)
+        ok = zen < np.radians(85)
+        x, y = src.camera.pixel(az[ok], zen[ok])
+        lines[f"advected with {'ERA5' if name == 'era5' else name}"] = (x, y)
+    frame = g.frames[g.frames["time"] == t].iloc[0]
+    polys = list(g.polygons[(g.polygons["time"] == t) & (g.polygons["flight"] == flight)]["polygon"])
+    image = src.root / "train" / "images" / str(frame["file_name"])
+    return overlay(image, polys, lines, f"{day} flight {flight} at {pd.Timestamp(t):%H:%M:%S} UTC", out)
+
+
+def make_figures(settings: Settings, runs: dict[str, Path], out: Path, n_overlays: int = 4) -> list[Path]:
+    """All figures from evaluation runs: ``runs`` keys dev_aircraft, holdout_aircraft, dev_contrails,
+    holdout_contrails, diagnostics (any subset)."""
+    made: list[Path] = []
+    tables = {}
+    if "dev_aircraft" in runs:
+        tables["dev"] = _scores(runs["dev_aircraft"], ["gp_matern_flow", "ridge"], "dev")
+    if "holdout_aircraft" in runs:
+        tables["holdout"] = _scores(runs["holdout_aircraft"], ["gp_frozen", "gp_frozen_dayvar", "ridge_dev"], "holdout")
+    if tables:
+        made.append(skill_per_day(tables, out / "skill_per_day.png"))
+    made += _contrail_figures(runs, out)
+    if "diagnostics" in runs:
+        hl = pd.read_csv(runs["diagnostics"] / "hollingsworth_lonnberg.csv")
+        made.append(hl_covariance(hl, settings.gp.model_dump(), out / "hl_covariance.png"))
+    if "holdout_contrails" in runs:
+        made += _map_and_overlays(settings, runs["holdout_contrails"], out, n_overlays)
+    return made
+
+
+def _contrail_figures(runs: dict[str, Path], out: Path) -> list[Path]:
+    sets = {"dev": ("dev_contrails", "gp_matern_flow"), "holdout": ("holdout_contrails", "gp_frozen")}
+    paired, ages, made = {}, {}, []
+    for name, (key, method) in sets.items():
+        if key in runs:
+            p = pd.read_csv(runs[key] / "flights_paired.csv", dtype={"day": str})
+            paired[name] = p.rename(columns={f"drift_{method}": "drift_gp"})
+            ages[name] = pd.read_csv(runs[key] / "age_summary.csv", dtype={"day": str}).replace(
+                {"method": {method: "gp"}}
+            )
+    if paired:
+        made.append(drift_scatter(paired, "gp", out / "drift_scatter.png"))
+        _COLORS["gp"] = "#1f77b4"
+        made.append(distance_vs_age(ages, out / "distance_vs_age.png", ["era5", "gp"]))
+    return made
+
+
+def _map_and_overlays(settings: Settings, run: Path, out: Path, n: int) -> list[Path]:
+    made = []
+    errs = pd.read_parquet(run / "errors_gp_frozen.parquet")
+    flights = _best_flights(errs, n)
+    if flights:
+        day = flights[0][0]
+        obs = pd.read_parquet(settings.paths.observations(day))
+        t = pd.Timestamp(errs[errs["day"].astype(str) == day]["time"].median())
+        made.append(
+            residual_map(run / "fields" / f"gp_frozen_{day}.nc", obs, 250.0, t, out / f"residual_map_{day}.png")
+        )
+    for day, flight in flights:
+        made.append(overlay_flight(settings, run, day, flight, "gp_frozen", out / f"overlay_{day}_{flight}.png"))
+    return made
