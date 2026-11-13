@@ -121,15 +121,25 @@ def lodo_ridge(
     base: RidgeConfig,
     grid: dict[str, Sequence[float]] | None = None,
     workers: int = 1,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Ridge kernel and prior chosen by pooled LOAO error on all days but one, LOAO on the held-out day."""
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Ridge kernel and prior chosen by pooled LOAO error on all days but one, LOAO on the held-out day.
+
+    Returns the predictions, the chosen configuration per fold (plus the all-days choice, with a flag telling whether
+    any chosen value lies on the edge of the grid) and the per-day grid table."""
     table = ridge_grid_tables(obs_by_day, base, grid, workers)
     keys = [k for k in table.columns if k in RidgeConfig.model_fields]
+
+    def best_cfg(rows: pd.DataFrame) -> tuple[RidgeConfig, float, bool]:
+        agg = rows.groupby(keys, as_index=False)[["sse", "n"]].sum()
+        best = agg.assign(mse=agg["sse"] / agg["n"]).sort_values("mse").iloc[0]
+        edge = any(best[k] in (table[k].min(), table[k].max()) for k in keys)
+        return base.model_copy(update={k: float(best[k]) for k in keys}), float(best["mse"]), edge
+
     preds, fits = [], []
     for day in obs_by_day:
-        train = table[table["day"] != day].groupby(keys, as_index=False)[["sse", "n"]].sum()
-        best = train.assign(mse=train["sse"] / train["n"]).sort_values("mse").iloc[0]
-        cfg = base.model_copy(update={k: float(best[k]) for k in keys})
-        fits.append({"held_out": day, **cfg.model_dump(), "train_mse": float(best["mse"])})
+        cfg, mse, edge = best_cfg(table[table["day"] != day])
+        fits.append({"held_out": day, **cfg.model_dump(), "train_mse": mse, "on_grid_edge": edge})
         preds.append(loao_frame(RidgeEstimator(obs_by_day[day], cfg), obs_by_day[day], 0.0))
-    return pd.concat(preds, ignore_index=True), pd.DataFrame(fits)
+    cfg, mse, edge = best_cfg(table)
+    fits.append({"held_out": "none (all days)", **cfg.model_dump(), "train_mse": mse, "on_grid_edge": edge})
+    return pd.concat(preds, ignore_index=True), pd.DataFrame(fits), table

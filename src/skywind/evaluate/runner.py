@@ -173,7 +173,9 @@ def run_transfer(settings: Settings, days: Sequence[str], out: Path) -> pd.DataF
 def run_ridge(settings: Settings, days: Sequence[str], out: Path) -> pd.DataFrame:
     """Evaluation A for the ridge baseline (LODO grid search) and for its fixed prototype kernel."""
     sets = {d: observation_set(settings, d) for d in days}
-    preds, fits = lodo_ridge(sets, settings.ridge, workers=settings.max_workers)
+    preds, fits, grid = lodo_ridge(sets, settings.ridge, workers=settings.max_workers)
+    out.mkdir(parents=True, exist_ok=True)
+    grid.to_csv(out / "ridge_grid.csv", index=False)
     proto = pd.concat([loao_frame(RidgeEstimator(sets[d], settings.ridge), sets[d], 0.0) for d in days])
     out.mkdir(parents=True, exist_ok=True)
     preds.to_parquet(out / "loao_ridge.parquet", index=False)
