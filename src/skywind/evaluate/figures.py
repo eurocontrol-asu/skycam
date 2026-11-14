@@ -227,7 +227,7 @@ def _best_flights(errors: pd.DataFrame, n: int) -> list[tuple[str, str]]:
 
 def overlay_flight(settings: Settings, contrail_run: Path, day: str, flight: str, method: str, out: Path) -> Path:
     """Camera frame (oldest frame with at least half the flight's maximum point count) with the annotation, the
-    the ``method``-advected emission points of that flight, projected with the camera geometry."""
+    ERA5-advected and the ``method``-advected emission points of that flight, projected with the camera geometry."""
     from skywind.evaluate.gvccs_raw import GvccsRaw
     from skywind.geo import FT, isa_altitude_m
     from skywind.gvccs.dataset import load_day
