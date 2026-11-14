@@ -205,6 +205,9 @@ def overlay(
     for (name, (x, y)), c in zip(lines.items(), ("#ffd60a", "#30d5ff", "#34c759"), strict=False):
         ax.plot(x, y, "-", color=c, lw=1.3, label=name)
     ax.plot([], [], color="#ff3b30", label="GVCCS annotation")
+    h, w = np.asarray(Image.open(image)).shape[:2]
+    ax.set_xlim(0, w)
+    ax.set_ylim(h, 0)
     ax.legend(loc="lower left", fontsize=8)
     ax.set_title(title, fontsize=9)
     ax.set_axis_off()
