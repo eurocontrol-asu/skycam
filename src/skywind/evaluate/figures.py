@@ -220,13 +220,13 @@ def _scores(run: Path, keep: Sequence[str], set_name: str) -> pd.DataFrame:
 
 
 def _best_flights(errors: pd.DataFrame, n: int) -> list[tuple[str, str]]:
-    """Flights with the most annotated points (clear, long contrails)."""
-    c = errors.groupby(["day", "flight"]).size().sort_values(ascending=False)
+    """Flights with the most annotated points older than 15 min (clear, long-lived contrails)."""
+    c = errors[errors["age_min"] > 15].groupby(["day", "flight"]).size().sort_values(ascending=False)
     return [(str(d), str(f)) for d, f in c.index[:n]]
 
 
 def overlay_flight(settings: Settings, contrail_run: Path, day: str, flight: str, method: str, out: Path) -> Path:
-    """Camera frame (frame with the most annotated points of the flight) with the annotation, the ERA5-advected and
+    """Camera frame (oldest frame with at least half the flight's maximum point count) with the annotation, the
     the ``method``-advected emission points of that flight, projected with the camera geometry."""
     from skywind.evaluate.gvccs_raw import GvccsRaw
     from skywind.geo import FT, isa_altitude_m
@@ -237,7 +237,8 @@ def overlay_flight(settings: Settings, contrail_run: Path, day: str, flight: str
     g = load_day(src.root, day)
     errs = pd.read_parquet(contrail_run / f"errors_{method}.parquet")
     e = errs[(errs["day"].astype(str) == day) & (errs["flight"].astype(str) == flight)]
-    t = pd.Timestamp(str(e.groupby("time").size().idxmax()))
+    per = e.groupby("time").agg(n=("age_min", "size"), age=("age_min", "mean"))
+    t = pd.Timestamp(str(per[per["n"] >= 0.5 * per["n"].max()]["age"].idxmax()))
     fid = str(e["flight_id"].iloc[0])
     sv, _ = state_vectors(settings, day)
     f = sv[sv["flight_id"] == fid]
