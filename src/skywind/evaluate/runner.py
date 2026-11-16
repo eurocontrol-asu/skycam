@@ -58,6 +58,7 @@ class Variant:
     strict_offsets: bool = False
     day_refit: tuple[str, ...] = ()
     reuse: str = ""  # variant whose fitted hyperparameters may be reused (then only ``day_refit`` is re-estimated)
+    block_minutes: float = 30.0  # composite-likelihood block length
 
 
 _VARIANCES = ("log_sigma_field", "log_sigma_bias", "log_sigma_noise")
@@ -75,6 +76,18 @@ VARIANTS: dict[str, Variant] = {
     "gp_matern_flow": Variant({"kernel": "matern32", "flow_following": True}),
     "gp_matern_dayvar": Variant({"kernel": "matern32"}, day_refit=_VARIANCES),
     "gp_matern_cross": Variant({"kernel": "matern32"}, use_cross=True),
+    # milestone 3 candidate: two-scale field (short + long horizontal / time scales); 60 min blocks so that the long
+    # time scale is identifiable within a block
+    "gp_twoscale": Variant(
+        {
+            "kernel": "matern32",
+            "flow_following": True,
+            "sigma_field2": 1.0,
+            "length_h2_km": 150.0,
+            "length_t2_min": 240.0,
+        },
+        block_minutes=60.0,
+    ),
     "gp_matern_flow_dayvar": Variant(
         {"kernel": "matern32", "flow_following": True}, day_refit=_VARIANCES, reuse="gp_matern_flow"
     ),
@@ -135,10 +148,10 @@ def run_aircraft(
         preds, fits = _reuse_fits(settings, days, variant, pd.read_csv(previous, dtype={"held_out": str}), provider)
     else:
         base = replace(GPParams.from_config(settings.gp), **v.overrides)
-        fit_kwargs: dict[str, Any] = {"workers": settings.max_workers}
+        fit_kwargs: dict[str, Any] = {"workers": settings.max_workers, "block_minutes": v.block_minutes}
         preds, fits = lodo_gp(days, provider, base, fit_kwargs, _est_kwargs(settings), v.day_refit)
         sets = provider("")
-        all_fit = fit_gp([sets[d] for d in days], base, workers=settings.max_workers)
+        all_fit = fit_gp([sets[d] for d in days], base, **fit_kwargs)
         fits = pd.concat(
             [fits, pd.DataFrame([{"held_out": "none (all days)", **all_fit.summary()}])], ignore_index=True
         )

@@ -176,3 +176,19 @@ def test_grid_solver_matches_pointwise_prediction(flow: bool) -> None:
     pts = est.predict(Points(X, np.zeros((len(X), 2))))
     np.testing.assert_allclose(grid["du"].ravel(), pts.du, atol=1e-8)
     np.testing.assert_allclose(grid["var_v"].ravel(), pts.var_v, atol=1e-8)
+
+
+def test_two_scale_grid_solver_and_prior_variance() -> None:
+    obs = tracks([0.0, 90.0], n_tracks=3)
+    p = GPParams(
+        **{**PARAMS.as_dict(), "kernel": "matern32", "sigma_field2": 1.5, "length_h2_km": 300.0, "length_t2_min": 600.0}
+    )
+    est = GPEstimator(obs, p, cutoff=50.0, tile_minutes=1e-3, max_neighbours=100_000)
+    assert est.prior_var == pytest.approx(PARAMS.sigma_field**2 + 1.5**2)
+    times, z = np.array([T0]), np.array([10000.0])
+    xy = np.array([[0.0, 0.0], [50.0, -20.0], [3000.0, 3000.0]])
+    grid = est.predict_grid(times, z, xy)
+    pts = est.predict(Points(np.c_[xy, np.full(3, 10000.0), np.full(3, T0)], np.zeros((3, 2))))
+    np.testing.assert_allclose(grid["du"].ravel(), pts.du, atol=1e-8)
+    np.testing.assert_allclose(grid["var_u"].ravel(), pts.var_u, atol=1e-8)
+    assert grid["var_u"].ravel()[2] == pytest.approx(est.prior_var)

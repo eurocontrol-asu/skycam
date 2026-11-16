@@ -89,3 +89,43 @@ def test_blocks_are_disjoint_in_time_and_thinned() -> None:
     assert all(len(b) <= 50 for b in blocks)
     spans = [(b.X[:, 3].min(), b.X[:, 3].max()) for b in blocks]
     assert all(s1[1] < s2[0] for s1, s2 in itertools.pairwise(spans))
+
+
+def test_two_scale_gradient() -> None:
+    obs = tracks([0.0, 90.0], n_tracks=2)
+    obs = ObsSet(
+        obs.X
+        + np.c_[
+            np.zeros((len(obs), 2)), np.linspace(0, 300, len(obs))[:, None], np.linspace(0, 3600, len(obs))[:, None]
+        ],
+        obs.e,
+        obs.y,
+        obs.kind,
+        obs.aircraft,
+        obs.bg,
+        obs.day,
+        obs.icao24,
+    )
+    p = GPParams(
+        length_h_km=30,
+        length_z_m=250,
+        length_t_min=20,
+        sigma_field=1.5,
+        sigma_bias=0.6,
+        mean_bias=0.1,
+        sigma_noise=0.7,
+        kernel="matern32",
+        sigma_field2=1.2,
+        length_h2_km=200,
+        length_t2_min=120,
+    )
+    names = free_parameters(p, False)
+    assert {"log_sigma_field2", "log_length_h2_km", "log_length_t2_min"} <= set(names)
+    _, grad = block_loglik(obs, p, names)
+    x = vector_from_params(p, names)
+    for j in range(len(names)):
+        h = np.zeros_like(x)
+        h[j] = 1e-5
+        up = block_loglik(obs, params_from_vector(p, names, x + h), names)[0]
+        down = block_loglik(obs, params_from_vector(p, names, x - h), names)[0]
+        assert grad[j] == pytest.approx((up - down) / 2e-5, rel=1e-4, abs=1e-4)

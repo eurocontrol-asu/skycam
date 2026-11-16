@@ -52,6 +52,9 @@ BOUNDS: dict[str, tuple[float, float]] = {
     "log_sigma_noise": (math.log(0.1), math.log(5.0)),
     "log_sigma_cross_noise": (math.log(0.1), math.log(10.0)),
     "log_sigma_cross_bias": (math.log(0.02), math.log(10.0)),
+    "log_sigma_field2": (math.log(0.05), math.log(10.0)),
+    "log_length_h2_km": (math.log(30.0), math.log(2000.0)),
+    "log_length_t2_min": (math.log(10.0), math.log(2880.0)),
 }
 
 
@@ -59,8 +62,10 @@ def free_parameters(p: GPParams, has_cross: bool) -> list[str]:
     names = ["log_length_h_km", "log_length_z_m", "log_length_t_min", "log_sigma_field", "log_sigma_noise"]
     if p.use_bias:
         names += ["log_sigma_bias", "mean_bias"]
-    if has_cross:
+    if has_cross and p.fit_cross_noise:
         names += ["log_sigma_cross_noise", "log_sigma_cross_bias"]
+    if p.sigma_field2 > 0:
+        names += ["log_sigma_field2", "log_length_h2_km", "log_length_t2_min"]
     return names
 
 

@@ -109,6 +109,6 @@ def desroziers(est: GPEstimator) -> dict[str, float]:
         "R_assumed": r_assumed,
         "R_ratio": float(np.mean(d_oa * d_ob) / r_assumed),
         "HBH_estimated": float(np.mean(d_ab * d_ob)),
-        "HBH_assumed": p.sigma_field**2,
-        "HBH_ratio": float(np.mean(d_ab * d_ob) / p.sigma_field**2),
+        "HBH_assumed": p.field_var,
+        "HBH_ratio": float(np.mean(d_ab * d_ob) / p.field_var),
     }

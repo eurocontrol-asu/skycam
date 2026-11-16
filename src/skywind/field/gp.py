@@ -53,10 +53,27 @@ class GPParams:
     kernel: Kernel = "gaussian"
     use_bias: bool = True
     flow_following: bool = False
+    sigma_field2: float = 0.0
+    length_h2_km: float = 150.0
+    length_t2_min: float = 240.0
+    fit_cross_noise: bool = True  # False: cross-heading noise / bias fixed from the offset statistics
 
     @property
     def lengths(self) -> Lengths:
         return (self.length_h_km, self.length_z_m, self.length_t_min)
+
+    @property
+    def components(self) -> list[tuple[float, Lengths]]:
+        """(variance, lengths) of each field component: short scale, plus the long scale when ``sigma_field2`` > 0
+        (same vertical scale, own horizontal and time scales)."""
+        comps = [(self.sigma_field**2, self.lengths)]
+        if self.sigma_field2 > 0:
+            comps.append((self.sigma_field2**2, (self.length_h2_km, self.length_z_m, self.length_t2_min)))
+        return comps
+
+    @property
+    def field_var(self) -> float:
+        return float(sum(v for v, _ in self.components))
 
     @classmethod
     def from_config(cls, cfg: GPConfig) -> GPParams:
@@ -88,11 +105,21 @@ def _bias_and_noise(obs: ObsSet, p: GPParams) -> tuple[FloatArray, FloatArray, F
     return same, sb, sn
 
 
+def field_covariance(XA: FloatArray, XB: FloatArray, p: GPParams) -> FloatArray:
+    """Covariance of one residual component between two sets of (already transformed) coordinates."""
+    out: FloatArray | None = None
+    for var, lengths in p.components:
+        k = correlation(XA, XB, lengths, p.kernel)
+        k *= var
+        out = k if out is None else out + k
+    assert out is not None  # noqa: S101 - at least one component
+    return out
+
+
 def covariance(obs: ObsSet, p: GPParams, t0: float) -> FloatArray:
     X = _coords(obs.X, obs.bg, p, t0)
-    k = correlation(X, X, p.lengths, p.kernel)
     same, sb, sn = _bias_and_noise(obs, p)
-    C = p.sigma_field**2 * (obs.e @ obs.e.T) * k + same * sb[:, None] * sb[None, :]
+    C = (obs.e @ obs.e.T) * field_covariance(X, X, p) + same * sb[:, None] * sb[None, :]
     C[np.diag_indices_from(C)] += sn**2
     return C
 
@@ -115,15 +142,27 @@ def covariance_and_grads(obs: ObsSet, p: GPParams, t0: float) -> tuple[FloatArra
         "log_sigma_noise": np.diag(2 * sn**2 * ~cross),
         "log_sigma_cross_noise": np.diag(2 * sn**2 * cross),
     }
-    C = sf2 * ee * k + same * sb[:, None] * sb[None, :]
+    field = sf2 * k
+    if p.sigma_field2 > 0:
+        s2 = p.sigma_field2**2
+        k2, dk2 = correlation_and_grads(X, X, p.components[1][1], p.kernel)
+        grads["log_length_z_m"] = grads["log_length_z_m"] + s2 * ee * dk2[1]
+        grads.update(
+            {
+                "log_sigma_field2": 2 * s2 * ee * k2,
+                "log_length_h2_km": s2 * ee * dk2[0],
+                "log_length_t2_min": s2 * ee * dk2[2],
+            }
+        )
+        field = field + s2 * k2
+    C = ee * field + same * sb[:, None] * sb[None, :]
     C[np.diag_indices_from(C)] += sn**2
     return C, grads
 
 
 def cross_covariance(points: Points, obs: ObsSet, p: GPParams, t0: float) -> tuple[FloatArray, FloatArray]:
     """Cov(du(x*), y_i) and Cov(dv(x*), y_i), each (m, n)."""
-    k = correlation(_coords(points.X, points.bg, p, t0), _coords(obs.X, obs.bg, p, t0), p.lengths, p.kernel)
-    k *= p.sigma_field**2
+    k = field_covariance(_coords(points.X, points.bg, p, t0), _coords(obs.X, obs.bg, p, t0), p)
     return k * obs.e[None, :, 0], k * obs.e[None, :, 1]
 
 
@@ -161,12 +200,14 @@ class GPEstimator:
 
     @property
     def prior_var(self) -> float:
-        return self.p.sigma_field**2
+        return self.p.field_var
 
     # ---------------------------------------------------------------- neighbourhoods
     def _scales(self) -> FloatArray:
-        lh, lz, lt = self.p.lengths
-        return np.array([lh, lh, lz, lt * 60.0])
+        """Largest scale of the components in each dimension (neighbourhood cut-off)."""
+        lh = max(c[1][0] for c in self.p.components)
+        lt = max(c[1][2] for c in self.p.components)
+        return np.array([lh, lh, self.p.length_z_m, lt * 60.0])
 
     def _neighbours(self, Xq: FloatArray, t0: float, must: IntArray | None = None) -> IntArray:
         """Observations within ``cutoff`` scaled distance of the bounding box of the query coordinates ``Xq``."""
@@ -224,19 +265,13 @@ class GPEstimator:
         sel, obs, L, alpha, t0 = self._cache
         if len(sel) == 0:
             return
-        k = correlation(
-            _coords(points.X[q], points.bg[q], self.p, t0),
-            _coords(obs.X, obs.bg, self.p, t0),
-            self.p.lengths,
-            self.p.kernel,
-        )
-        sf2 = self.p.sigma_field**2
-        out["du"][q] = sf2 * (k @ (alpha * obs.e[:, 0]))
-        out["dv"][q] = sf2 * (k @ (alpha * obs.e[:, 1]))
-        v = want[q] & (k.max(1) > 1e-6)
+        k = field_covariance(_coords(points.X[q], points.bg[q], self.p, t0), _coords(obs.X, obs.bg, self.p, t0), self.p)
+        out["du"][q] = k @ (alpha * obs.e[:, 0])
+        out["dv"][q] = k @ (alpha * obs.e[:, 1])
+        v = want[q] & (k.max(1) > 1e-6 * self.prior_var)
         if not v.any():
             return
-        kv = sf2 * k[v]
+        kv = k[v]
         Vu = solve_triangular(L[0], (kv * obs.e[None, :, 0]).T, lower=True, check_finite=False)
         Vv = solve_triangular(L[0], (kv * obs.e[None, :, 1]).T, lower=True, check_finite=False)
         qv = q[v]
@@ -276,15 +311,16 @@ class GPEstimator:
         if len(sel) == 0:
             return
         Xo = _coords(obs.X, obs.bg, self.p, t0)
-        kh, kz, kt = factor_correlations(xy, z, t0, Xo, self.p.lengths, self.p.kernel)
-        sf2 = self.p.sigma_field**2
+        factors = [
+            (var, *factor_correlations(xy, z, t0, Xo, lengths, self.p.kernel)) for var, lengths in self.p.components
+        ]
         for c, name in ((0, "du"), (1, "dv")):
-            w = sf2 * kt * alpha * obs.e[:, c]
-            out[name][i, lev] = (kz * w) @ kh.T
-        lv, hv = np.nonzero(want & ((kz.max(1)[:, None] * kh.max(1)[None, :]) * kt.max() > 1e-6))
+            out[name][i, lev] = sum((kz * (var * kt * alpha * obs.e[:, c])) @ kh.T for var, kh, kz, kt in factors)
+        reach = sum((kz.max(1)[:, None] * kh.max(1)[None, :]) * kt.max() for _, kh, kz, kt in factors)
+        lv, hv = np.nonzero(want & (reach > 1e-6))
         for start in range(0, len(lv), _BLOCK):
             li, hi = lv[start : start + _BLOCK], hv[start : start + _BLOCK]
-            k = sf2 * kh[hi] * kz[li] * kt
+            k = sum(var * kh[hi] * kz[li] * kt for var, kh, kz, kt in factors)
             Vu = solve_triangular(L[0], (k * obs.e[None, :, 0]).T, lower=True, check_finite=False)
             Vv = solve_triangular(L[0], (k * obs.e[None, :, 1]).T, lower=True, check_finite=False)
             out["var_u"][i, lev[li], hi] = self.prior_var - (Vu**2).sum(0)

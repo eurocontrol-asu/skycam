@@ -148,6 +148,9 @@ class GPConfig(BaseModel):
     sigma_noise: float = 0.59
     use_bias: bool = True
     flow_following: bool = True
+    sigma_field2: float = 0.0  # second (long-scale) component, disabled in the frozen configuration
+    length_h2_km: float = 150.0
+    length_t2_min: float = 240.0
     use_cross: bool = False
     sigma_cross_noise: float = 2.0
     sigma_cross_bias: float = 1.0
