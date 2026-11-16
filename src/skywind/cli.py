@@ -331,8 +331,11 @@ def figures(
     holdout_aircraft: Path | None = None,
     dev_contrails: Path | None = None,
     holdout_contrails: Path | None = None,
+    holdout2_aircraft: Path | None = None,
+    holdout2_contrails: Path | None = None,
     diagnostics: Path | None = None,
     overlays: int = 4,
+    animations: int = 3,
     config: Config = None,
 ) -> None:
     """Regenerate the figures from evaluation run directories (CSV / parquet outputs only)."""
@@ -345,17 +348,20 @@ def figures(
         "holdout_aircraft": holdout_aircraft,
         "dev_contrails": dev_contrails,
         "holdout_contrails": holdout_contrails,
+        "holdout2_aircraft": holdout2_aircraft,
+        "holdout2_contrails": holdout2_contrails,
         "diagnostics": diagnostics,
     }
     runs = {k: v for k, v in given.items() if v is not None}
     out = new_run_dir(s.paths.runs, "figures", "figures from " + ", ".join(f"{k}={v}" for k, v in runs.items()))
-    _print({"run": str(out), "figures": [str(p) for p in make_figures(s, runs, out, overlays)]})
+    _print({"run": str(out), "figures": [str(p) for p in make_figures(s, runs, out, overlays, animations)]})
 
 
 @evaluate_app.command
 def tables(
     dev_aircraft: Path | None = None,
     holdout_aircraft: Path | None = None,
+    holdout2_aircraft: Path | None = None,
     contrails: Annotated[list[Path] | None, cyclopts.Parameter(consume_multiple=True)] = None,
     config: Config = None,
 ) -> None:
@@ -366,8 +372,8 @@ def tables(
     s = _settings(config)
     out = new_run_dir(s.paths.runs, "tables", f"README tables from {dev_aircraft}, {holdout_aircraft}, {contrails}")
     parts = []
-    if dev_aircraft or holdout_aircraft:
-        a = table_a(dev_aircraft, holdout_aircraft)
+    if dev_aircraft or holdout_aircraft or holdout2_aircraft:
+        a = table_a(dev_aircraft, holdout_aircraft, holdout2_aircraft)
         a.to_csv(out / "table_A.csv", index=False)
         parts.append(markdown_table(a.drop(columns=["variant"]), 3))
     for run in contrails or []:

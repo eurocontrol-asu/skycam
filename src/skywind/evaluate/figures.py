@@ -84,7 +84,7 @@ def drift_scatter(paired: dict[str, pd.DataFrame], method: str, out: Path) -> Pa
     """Per-flight |drift| with ERA5 vs with ``method`` (paired table of evaluation B), one colour per set."""
     fig, ax = plt.subplots(figsize=(5, 5))
     vmax = 0.0
-    for (name, t), c in zip(paired.items(), ("#1f77b4", "#d62728"), strict=False):
+    for (name, t), c in zip(paired.items(), ("#1f77b4", "#d62728", "#2ca02c"), strict=False):
         a, b = t["drift_era5"].abs(), t[f"drift_{method}"].abs()
         ax.scatter(a, b, s=14, alpha=0.7, color=c, label=f"{name} ({len(t)} flights)")
         vmax = max(vmax, float(a.max()), float(b.max()))
@@ -260,28 +260,50 @@ def overlay_flight(settings: Settings, contrail_run: Path, day: str, flight: str
     return overlay(image, polys, lines, f"{day} flight {flight} at {pd.Timestamp(t):%H:%M:%S} UTC", out)
 
 
-def make_figures(settings: Settings, runs: dict[str, Path], out: Path, n_overlays: int = 4) -> list[Path]:
-    """All figures from evaluation runs: ``runs`` keys dev_aircraft, holdout_aircraft, dev_contrails,
-    holdout_contrails, diagnostics (any subset)."""
+def make_figures(
+    settings: Settings, runs: dict[str, Path], out: Path, n_overlays: int = 4, n_animations: int = 3
+) -> list[Path]:
+    """All figures from evaluation runs: ``runs`` keys dev_aircraft, holdout_aircraft, holdout2_aircraft,
+    dev_contrails, holdout_contrails, holdout2_contrails, diagnostics (any subset)."""
     made: list[Path] = []
     tables = {}
     if "dev_aircraft" in runs:
         tables["dev"] = _scores(runs["dev_aircraft"], ["gp_matern_flow", "ridge"], "dev")
-    if "holdout_aircraft" in runs:
-        tables["holdout"] = _scores(runs["holdout_aircraft"], ["gp_frozen", "gp_frozen_dayvar", "ridge_dev"], "holdout")
+    for key, name in (("holdout_aircraft", "holdout"), ("holdout2_aircraft", "holdout2")):
+        if key in runs:
+            tables[name] = _scores(runs[key], ["gp_frozen", "ridge_dev"], name)
     if tables:
         made.append(skill_per_day(tables, out / "skill_per_day.png"))
     made += _contrail_figures(runs, out)
     if "diagnostics" in runs:
         hl = pd.read_csv(runs["diagnostics"] / "hollingsworth_lonnberg.csv")
         made.append(hl_covariance(hl, settings.gp.model_dump(), out / "hl_covariance.png"))
-    if "holdout_contrails" in runs:
-        made += _map_and_overlays(settings, runs["holdout_contrails"], out, n_overlays)
+    latest = runs.get("holdout2_contrails", runs.get("holdout_contrails"))
+    if latest is not None:
+        made += _map_and_overlays(settings, latest, out, n_overlays)
+    if "holdout2_contrails" in runs and n_animations:
+        for day, flight in _best_flights(
+            pd.read_parquet(runs["holdout2_contrails"] / "errors_gp_frozen.parquet"), n_animations
+        ):
+            made.append(
+                animate_flight(
+                    settings,
+                    runs["holdout2_contrails"],
+                    day,
+                    flight,
+                    "gp_frozen",
+                    out / f"animation_{day}_{flight}.gif",
+                )
+            )
     return made
 
 
 def _contrail_figures(runs: dict[str, Path], out: Path) -> list[Path]:
-    sets = {"dev": ("dev_contrails", "gp_matern_flow"), "holdout": ("holdout_contrails", "gp_frozen")}
+    sets = {
+        "dev": ("dev_contrails", "gp_frozen"),
+        "holdout": ("holdout_contrails", "gp_frozen"),
+        "holdout2": ("holdout2_contrails", "gp_frozen"),
+    }
     paired, ages, made = {}, {}, []
     for name, (key, method) in sets.items():
         if key in runs:

@@ -132,10 +132,10 @@ _A_KEEP = {
 }
 
 
-def table_a(dev_run: Path | None, holdout_run: Path | None) -> pd.DataFrame:
-    """Per day and pooled scores of evaluation A, dev (leave-one-day-out) and holdout (frozen) side by side."""
+def table_a(dev_run: Path | None, holdout_run: Path | None, holdout2_run: Path | None = None) -> pd.DataFrame:
+    """Per day and pooled scores of evaluation A: dev (leave-one-day-out), holdout and holdout2 (frozen)."""
     parts = []
-    for run, set_name in ((dev_run, "dev"), (holdout_run, "holdout")):
+    for run, set_name in ((dev_run, "dev"), (holdout_run, "holdout"), (holdout2_run, "holdout2")):
         if run is None:
             continue
         t = pd.read_csv(run / "summary.csv", dtype={"day": str})
