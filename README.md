@@ -83,7 +83,13 @@ All numbers below come from CSV files written by commands (`data/runs/20261113-s
 
 **Freeze.** Tag `frozen-v1` = `ea1f7cfbd441fa7331b2f8f873845ad2ef8acf6f`, made on the dev days only (see "Frozen
 configuration" above). Later commits touch performance and evaluation tooling only: the ridge grid solver gives the same
-numbers as the pointwise solver (unit test); no hyperparameter, filter or estimator logic changed after the tag.
+numbers as the pointwise solver (unit test); no hyperparameter or filter changed after the tag.
+One default did change, after the first holdout set had been evaluated: at `frozen-v1` the shipped procedure re-estimated
+the three variances on each day (`day_variances=True`), and the first evaluation B of the holdout set used it (median
+drift 36.4 m/min). Because that re-estimation lowered the holdout skill in evaluation A (0.486 against 0.499), it was
+switched off by default in commit `f92094b`, tagged `frozen-v1.1`. Every number reported as "frozen" in the summary
+tables comes from `frozen-v1.1` (first holdout set: 38.4 m/min). The first holdout set is therefore not a clean test of
+that one choice; `holdout2` was first read after `frozen-v1.1` and is.
 
 **Speed** (same host, loaded; at most 8 worker processes):
 
@@ -246,7 +252,7 @@ read). Override per machine with `skywind.local.toml` or `SKYWIND_DATA`, `SKYWIN
     uv run skywind days --set-name dev
 
 New day, end to end (fetches state vectors and ERA5 from the configured host, Comm-B from OpenSky Trino with the
-credentials of `~/.config/pyopensky/settings.conf` -- it fails instead of opening a browser -- then decodes, builds the
+credentials pyopensky resolves (here `~/.config/traffic/traffic.conf`, section `[opensky]`) -- it fails instead of opening a browser -- then decodes, builds the
 observations, exports the corrected field and advects the cruise traffic of the box with ERA5 and corrected winds):
 
     uv run skywind run 2024-06-01 --windows "05:00-07:00"
