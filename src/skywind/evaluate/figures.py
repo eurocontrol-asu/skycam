@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 
@@ -19,6 +20,7 @@ from matplotlib.figure import Figure
 from skywind.config import Settings
 
 __all__ = [
+    "animate_flight",
     "distance_vs_age",
     "drift_scatter",
     "hl_covariance",
@@ -309,3 +311,65 @@ def _map_and_overlays(settings: Settings, run: Path, out: Path, n: int) -> list[
     for day, flight in flights:
         made.append(overlay_flight(settings, run, day, flight, "gp_frozen", out / f"overlay_{day}_{flight}.png"))
     return made
+
+
+def _projected_line(src: Any, adv: pd.DataFrame, fid: str, t: pd.Timestamp, gap: float) -> tuple[Any, Any]:
+    from skywind.geo import isa_altitude_m
+
+    a = adv[(adv["flight_id"] == fid) & (adv["time"] == t)].sort_values("waypoint")
+    h = isa_altitude_m(a["level"].to_numpy() * 100) + gap
+    az, zen = src.camera.az_zen(a["latitude"].to_numpy(), a["longitude"].to_numpy(), h)
+    ok = zen < np.radians(85)
+    x, y = src.camera.pixel(az[ok], zen[ok])
+    return x, y
+
+
+def animate_flight(
+    settings: Settings, contrail_run: Path, day: str, flight: str, method: str, out: Path, max_frames: int = 60
+) -> Path:
+    """GIF over the contrail's annotated life: camera frame, annotation, ERA5-advected and ``method``-advected lines."""
+    from matplotlib.animation import FuncAnimation, PillowWriter
+    from PIL import Image
+
+    from skywind.evaluate.gvccs_raw import GvccsRaw
+    from skywind.geo import FT
+    from skywind.gvccs.dataset import load_day
+    from skywind.pipeline import state_vectors
+
+    src = GvccsRaw(settings)
+    g = load_day(src.root, day)
+    e = pd.read_parquet(contrail_run / f"errors_{method}.parquet")
+    e = e[(e["day"].astype(str) == day) & (e["flight"].astype(str) == flight)]
+    fid = str(e["flight_id"].iloc[0])
+    times = sorted(e["time"].unique())
+    times = [times[i] for i in np.linspace(0, len(times) - 1, min(len(times), max_frames)).astype(int)]
+    sv, _ = state_vectors(settings, day)
+    f = sv[sv["flight_id"] == fid]
+    gap = float(((f["geoaltitude"] - f["altitude"]) * FT).median())
+    gap = gap if np.isfinite(gap) else 0.0
+    adv = {n: pd.read_parquet(contrail_run / "advected" / f"{n}_{day}.parquet") for n in ("era5", method)}
+    fig, ax = plt.subplots(figsize=(5.5, 5.5))
+
+    def draw(t: Any) -> None:
+        ax.clear()
+        t = pd.Timestamp(t)
+        frame = g.frames[g.frames["time"] == t].iloc[0]
+        ax.imshow(np.asarray(Image.open(src.root / "train" / "images" / str(frame["file_name"]))))
+        for poly in g.polygons[(g.polygons["time"] == t) & (g.polygons["flight"] == flight)]["polygon"]:
+            xy = np.asarray(poly).reshape(-1, 2)
+            ax.fill(xy[:, 0], xy[:, 1], facecolor="none", edgecolor="#ff3b30", lw=1.0)
+        for (name, a), c in zip(adv.items(), ("#ffd60a", "#30d5ff"), strict=True):
+            x, y = _projected_line(src, a, fid, t, gap)
+            ax.plot(x, y, "-", color=c, lw=1.2, label="ERA5" if name == "era5" else name)
+        ax.plot([], [], color="#ff3b30", label="GVCCS annotation")
+        ax.set_xlim(0, 1024)
+        ax.set_ylim(1024, 0)
+        ax.set_axis_off()
+        ax.legend(loc="lower left", fontsize=7)
+        ax.set_title(f"{day} flight {flight} {t:%H:%M:%S} UTC", fontsize=8)
+
+    anim = FuncAnimation(fig, draw, frames=times, interval=250)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    anim.save(out, writer=PillowWriter(fps=4), dpi=90)
+    plt.close(fig)
+    return out
