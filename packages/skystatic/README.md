@@ -37,7 +37,7 @@ uv run skystatic run DAY [DAY ...] --zenith zenith.npz --output out/ \
 ```
 
 A day is a folder of images or a zip archive of images; file names must hold a
-`YYYYMMDDhhmmss` timestamp. The zenith map is a `.npy`, or one array of a `.npz`
+`YYYYMMDDhhmmss` timestamp. The day label is the ISO date of those timestamps,\nregardless of the directory or archive name (for example `2023/10/12` becomes\n`2023-10-12`). Empty sources, sources spanning several dates, and duplicate day\nlabels or dates fail before any cache lookup or output write. The same source\nmay be both a processed day and a reference. Explicit Python labels must also\nbe unique. A run describes one camera.\n\nCaches identify the source path, selected images, file revisions and aggregation\nparameters. Old caches keyed only by a folder name are not reused. Removing or\nmodifying images invalidates their cache; a cache is not an archive of the inputs.\n\nThe zenith map is a `.npy`, or one array of a `.npz`
 (`--zenith-key`, `--zenith-unit deg|rad`), at the native size of the frames or any size with the
 same aspect ratio.
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -46,7 +47,7 @@ def test_zip_source_reads_nested_members(tmp_path: Path) -> None:
     archive = write_zip_day(tmp_path / "CAM_20240101.zip", datetime(2024, 1, 1, 9), count=6)
     source = open_source(archive)
     assert isinstance(source, ZipSource)
-    assert source.label == "CAM_20240101"
+    assert source.label == "2024-01-01"
     frames = source.frames()
     assert len(frames) == 6
     assert source.read(frames[0])[:4] == b"\x89PNG"
@@ -119,9 +120,8 @@ def test_cache_is_reused_and_zip_gives_the_same_masks(tmp_path: Path) -> None:
     cached = list((tmp_path / "cache").glob("*.npz"))
     assert len(cached) == 1
     stamp = cached[0].stat().st_mtime_ns
-    for path in folder.iterdir():
-        path.unlink()  # a second run must not need the frames
-    run([open_source(folder)], geometry, CONFIG, tmp_path / "b", cache=tmp_path / "cache")
+    with patch("skystatic.pipeline.aggregate_parts", side_effect=AssertionError("cache miss")):
+        run([open_source(folder)], geometry, CONFIG, tmp_path / "b", cache=tmp_path / "cache")
     assert cached[0].stat().st_mtime_ns == stamp
     run([open_source(archive)], geometry, CONFIG, tmp_path / "c")
     first = np.asarray(Image.open(tmp_path / "a" / "classes_2024-01-01.png"))

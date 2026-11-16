@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from scipy.ndimage import label
 
 from skystatic.aggregate import Aggregates, aggregate_parts, daytime_frames, frame_size
-from skystatic.frames import FrameSource
+from skystatic.frames import FrameSource, source_date, source_fingerprint
 from skystatic.geometry import SkyGeometry
 from skystatic.masks import CLASS_NAMES, class_map, installation_mask, variable_mask
 from skystatic.render import overlay
@@ -99,7 +100,11 @@ class RunReport(BaseModel):
 def _load_or_aggregate(
     source: FrameSource, config: StaticConfig, cache: Path | None
 ) -> tuple[Aggregates, int, int]:
-    path = None if cache is None else cache / f"{source.label}_{config.aggregation_key()}.npz"
+    path = (
+        None
+        if cache is None
+        else cache / f"{source.label}_{config.aggregation_key()}_{source_fingerprint(source)}.npz"
+    )
     if path is not None and path.exists():
         with np.load(path) as stored:
             aggregates = Aggregates(
@@ -115,7 +120,7 @@ def _load_or_aggregate(
     aggregates = aggregate_parts(source, frames, size, config.parts, config.workers)
     if path is not None:
         cache.mkdir(parents=True, exist_ok=True)  # type: ignore[union-attr]
-        temporary = path.with_suffix(".tmp.npz")
+        temporary = path.with_name(f".{path.stem}.{uuid4().hex}.tmp.npz")
         np.savez(
             temporary,
             mean=aggregates.mean,
@@ -135,6 +140,7 @@ def compute_day(
     cache: Path | None = None,
 ) -> DayResult:
     """Static mask of one day: averages per part, then agreement between parts."""
+    source_date(source)
     aggregates, daytime, total = _load_or_aggregate(source, config, cache)
     parts = aggregates.geometric if config.aggregate == "geometric" else aggregates.mean
     height, width = parts.shape[1:3]
@@ -172,6 +178,32 @@ def _scaled_tolerance(config: StaticConfig, width: int) -> int:
     return round(config.tolerance * width / 1232) if config.tolerance else 0
 
 
+def _unique_sources(
+    days: Sequence[FrameSource], reference: Sequence[FrameSource]
+) -> dict[str, FrameSource]:
+    """Refuse ambiguous days before reading any cache or writing any output."""
+    unique: dict[str, FrameSource] = {}
+    fingerprints: dict[str, str] = {}
+    for group in (days, reference):
+        labels: set[str] = set()
+        dates: set[str] = set()
+        for source in group:
+            day = source_date(source)
+            name = source.label
+            if not name or name in {".", ".."} or Path(name).name != name:
+                raise ValueError(f"Invalid day label: {name!r}")
+            if name in labels or day in dates:
+                raise ValueError(f"Duplicate day label or date: {name!r} ({day})")
+            labels.add(name)
+            dates.add(day)
+            fingerprint = source_fingerprint(source)
+            if name in unique and fingerprints[name] != fingerprint:
+                raise ValueError(f"Duplicate day label refers to different sources: {name!r}")
+            unique[name] = source
+            fingerprints[name] = fingerprint
+    return unique
+
+
 def run(
     days: Sequence[FrameSource],
     geometry: SkyGeometry,
@@ -188,7 +220,7 @@ def run(
     """
     if not days:
         raise ValueError("No day to process")
-    unique = {source.label: source for source in [*days, *reference]}
+    unique = _unique_sources(days, reference)
     with ThreadPoolExecutor(config.jobs) as pool:
         computed = pool.map(lambda s: compute_day(s, geometry, config, cache), unique.values())
         results = dict(zip(unique, computed, strict=True))

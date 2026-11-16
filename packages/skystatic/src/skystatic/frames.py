@@ -7,7 +7,9 @@ separate so that it can run in worker threads while archive access stays seriali
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import io
+import json
 import re
 import threading
 import zipfile
@@ -85,17 +87,48 @@ def _to_frames(names: list[str], pattern: str | None) -> list[Frame]:
     return sorted(frames)
 
 
+def source_date(source: FrameSource) -> str:
+    """ISO date of the images; an empty batch or several dates is not a day."""
+    dates = sorted({frame.timestamp.date().isoformat() for frame in source.frames()})
+    if len(dates) != 1:
+        raise ValueError(f"Expected one image date, found {dates or 'no timestamped images'}")
+    return dates[0]
+
+
+def source_fingerprint(source: FrameSource) -> str:
+    """Identify source, selection and file revisions independently of its display label."""
+    digest = hashlib.sha256(b"skystatic-averages-v2")
+    frames = source.frames()
+    if isinstance(source, (DirectorySource, ZipSource)):
+        digest.update(
+            json.dumps([type(source).__name__, str(source.path.resolve()), source.pattern]).encode()
+        )
+        paths = (
+            [source.path / frame.name for frame in frames]
+            if isinstance(source, DirectorySource)
+            else [source.path]
+        )
+        revisions = [(p.stat().st_size, p.stat().st_mtime_ns) for p in paths]
+        digest.update(json.dumps(revisions).encode())
+    else:
+        # A custom source need not expose filesystem paths.
+        for frame in frames:
+            digest.update(hashlib.sha256(source.read(frame)).digest())
+    digest.update(json.dumps([(f.name, f.timestamp.isoformat()) for f in frames]).encode())
+    return digest.hexdigest()
+
+
 class DirectorySource:
     """Image files directly inside a directory."""
 
     def __init__(self, path: Path, pattern: str | None = None, label: str | None = None) -> None:
         self.path = path
         self.pattern = pattern
-        self._label = label or (path.parent.name if path.name == "images" else path.name)
+        self._label = label
 
     @property
     def label(self) -> str:
-        return self._label
+        return self._label or source_date(self)
 
     def frames(self) -> list[Frame]:
         return _to_frames([p.name for p in self.path.iterdir() if p.is_file()], self.pattern)
@@ -110,13 +143,13 @@ class ZipSource:
     def __init__(self, path: Path, pattern: str | None = None, label: str | None = None) -> None:
         self.path = path
         self.pattern = pattern
-        self._label = label or path.stem
+        self._label = label
         self._lock = threading.Lock()
         self._archive: zipfile.ZipFile | None = None
 
     @property
     def label(self) -> str:
-        return self._label
+        return self._label or source_date(self)
 
     def _open(self) -> zipfile.ZipFile:
         if self._archive is None:
