@@ -26,7 +26,13 @@ from skywind.evaluate.runner import (
 from skywind.field.gp import GPEstimator, GPParams
 from skywind.runs import new_run_dir, write_json
 
-__all__ = ["aircraft_campaign", "contrail_campaign", "diagnostics_campaign", "holdout_aircraft_campaign"]
+__all__ = [
+    "aircraft_campaign",
+    "candidates_campaign",
+    "contrail_campaign",
+    "diagnostics_campaign",
+    "holdout_aircraft_campaign",
+]
 
 
 def _ensure_calibration(settings: Settings, days: list[str]) -> None:
@@ -146,3 +152,42 @@ def holdout_aircraft_campaign(settings: Settings, days: list[str] | None = None)
     write_json(out / "frozen_config.json", settings.model_dump(mode="json"))
     pooled = summary[summary["day"] == "pooled"][["variant", "rmse_era5", "rmse_field", "skill", "z_sd", "cover95"]]
     return {"run": str(out), "pooled": pooled.to_dict("records")}
+
+
+def _pooled_skill(table: pd.DataFrame, variant: str) -> float:
+    return float(table[(table["variant"] == variant) & (table["day"] == "pooled")]["skill"].iloc[0])
+
+
+def candidates_campaign(
+    settings: Settings, twoscale_run: Path | None, days: list[str] | None = None, skip_b: bool = False
+) -> dict[str, Any]:
+    """Milestone 3 candidates on the dev days: across-heading checks (A, full vector) and evaluation B with frozen-v1,
+    the across-heading candidate and the two-scale candidate (raw GVCCS truth); adoption rule applied."""
+    from skywind.evaluate.candidates import adoption, cross_check, estimator_factory
+
+    days = days or available_days(settings.paths, "dev")
+    out = new_run_dir(settings.paths.runs, "candidates", f"milestone 3 candidates on the dev days {', '.join(days)}")
+    a_cross, across = cross_check(settings, days)
+    a_cross.to_csv(out / "a_cross.csv", index=False)
+    across.to_csv(out / "across_check.csv", index=False)
+    result: dict[str, Any] = {"run": str(out)}
+    if skip_b:
+        return result
+    fits = twoscale_run / "fits_gp_twoscale.csv" if twoscale_run else None
+    res = run_contrails(settings, GvccsRaw(settings), estimator_factory(settings, fits), out, days)
+    pooled_a = a_cross[a_cross["day"] == "pooled"].set_index("variant")["skill"]
+    rules = [
+        adoption(res["paired"], "gp_cross_emaddc", float(pooled_a["gp_frozen"]), float(pooled_a["gp_cross_emaddc"]))
+    ]
+    if twoscale_run is not None:
+        ts = pd.read_csv(twoscale_run / "summary.csv", dtype={"day": str})
+        ref = pd.read_csv(settings.paths.runs / "20261113-eval-aircraft-4" / "summary.csv", dtype={"day": str})
+        rules.append(
+            adoption(
+                res["paired"], "gp_twoscale", _pooled_skill(ref, "gp_matern_flow"), _pooled_skill(ts, "gp_twoscale")
+            )
+        )
+    table = pd.DataFrame(rules)
+    table.to_csv(out / "adoption.csv", index=False)
+    result["adoption"] = table.to_dict("records")
+    return result

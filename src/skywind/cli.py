@@ -274,6 +274,16 @@ def ridge(
 
 
 @evaluate_app.command
+def candidates(
+    twoscale_run: Path | None = None, days: Days = None, skip_b: bool = False, config: Config = None
+) -> None:
+    """Milestone 3 candidates on the dev days (two-scale field, EMADDC across-heading) and the adoption rule."""
+    from skywind.evaluate.campaign import candidates_campaign
+
+    _print(candidates_campaign(_settings(config), twoscale_run, days, skip_b))
+
+
+@evaluate_app.command
 def holdout_aircraft(days: Days = None, config: Config = None) -> None:
     """Evaluation A on the holdout days with the frozen configuration (no hyperparameter fitted on them)."""
     from skywind.evaluate.campaign import holdout_aircraft_campaign
