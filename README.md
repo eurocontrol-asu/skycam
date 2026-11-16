@@ -171,6 +171,51 @@ from the data host, Comm-B from OpenSky Trino (962 161 replies, 98 aircraft, 46 
 `pyopensky` 2.16 (pinned): from 2.17 `rawdata` rejects the receiver-serials column expression. Credentials are read by
 pyopensky from `~/.config/traffic/traffic.conf` (`[opensky]`), not from the empty `~/.config/pyopensky/settings.conf`.
 
+## Milestone 3: one improvement round, confirmation on unseen days
+
+Tables: `data/runs/20261113-skywind/20261116-tables-2/` (`skywind evaluate tables ...`); figures and animations:
+`20261116-figures-2/` (`skywind evaluate figures ... --animations 3`).
+
+**Housekeeping.** `skywind acquire` registers a new day with set `new` unless `--set-name` is given. The per-day
+variance re-estimation is off by default (`export --day-variances` to enable): `run` / `export` now use exactly the
+evaluated frozen-v1 configuration. Evaluation B on the dev days was re-run with the same protocol as the holdout days
+(raw GVCCS truth, frozen estimators): `20261116-eval-contrails`.
+
+**Candidates** (developed and judged on the six dev days only; adoption rule declared before the results: median
+|drift| of B better by at least 2 m/min with a one-sided paired Wilcoxon p < 0.05 against frozen-v1, and pooled A skill
+not lower by more than 0.01):
+
+| candidate | A pooled skill (frozen-v1 under the same protocol) | B median |drift| m/min (frozen-v1) | Wilcoxon p | adopted |
+|---|---|---|---|---|
+| C1 two-scale field (13 km / 20 min + 82 km / 218 min, shared 244 m; LODO marginal likelihood, 60 min blocks) | 0.562 (0.530) | 30.1 (28.9) | 0.18 | no |
+| C2 across-heading, EMADDC (offsets vs ERA5 from the other days, >= 40 obs on >= 2 days, fixed noise 0.72 m/s + airframe bias 1.42 m/s) | 0.531 (0.537) | 28.2 (28.9) | 0.007 | no |
+
+C2 details: the offset table (`calibrate --reference era5`, 16 store days) gives a median offset of -1.24 deg and a
+day-to-day scatter of 0.31 deg; 1 372 airframes are reliable (about 46 % of a day's observations). Image-independent
+check: the calibrated across-heading residual of held-out aircraft is predicted from the other aircraft with skill 0.32
+without and 0.42 with the across observations (`20261116-candidate-cross/across_check.csv`): the component carries real
+information, but the drift gain (0.7 m/min) is below the declared threshold. Neither candidate is adopted; both remain
+options (`sigma_field2 > 0`; `observation_set(..., use_cross=True, reference="era5")`), there is no `frozen-v2`.
+
+**holdout2** (19 GVCCS train days never used, acquired with `skywind acquire DAY WINDOW --set-name holdout2
+--padding-min 0`, window = first frame - 60 min to last frame + 5 min; 5.3-10.6 M Comm-B replies and 5 555-22 137
+observations per day).
+
+A (frozen-v1, nothing fitted on these days), pooled over 291 379 observations: ERA5 RMSE 2.12 m/s, GP 1.39 m/s,
+**skill 0.573** (z sd 0.93, 95 % coverage 0.96); ridge (dev kernel) 0.518 (z sd 0.76). The GP is better than the ridge on
+18 of 19 days.
+
+| set | A skill GP frozen-v1 | A skill ridge | B flights | B |drift| median / p90 ERA5 | GP frozen-v1 | ridge | improved GP / ridge | Wilcoxon p GP |
+|---|---|---|---|---|---|---|---|---|---|
+| dev (6 days; A leave-one-day-out) | 0.530 | 0.492 | 88 | 55.2 / 110.9 | 28.9 / 94.1 | 39.2 / 99.9 | 0.67 / 0.58 | 2e-5 |
+| holdout (10 days, second look) | 0.499 | 0.501 | 257 | 52.9 / 151.7 | 38.4 / 97.7 | 41.0 / 113.9 | 0.62 / 0.60 | 2e-9 |
+| **holdout2 (19 days, first look)** | **0.573** | 0.518 | **432** | 60.5 / 168.1 | **29.6 / 88.9** | 39.7 / 106.4 | **0.74** / 0.64 | 3e-32 |
+
+holdout2, distance to the annotated centre (m), median (p90): 0.5-5 min ERA5 212 (615), GP 148 (399), ridge 157 (440);
+5-10 min 462 (1362) / 253 (734) / 290 (856); 10-20 min 823 (2287) / 403 (1133) / 488 (1415); 20-40 min 1376 (3238) /
+648 (1896) / 821 (2286). Median |offset at emission| ERA5 157 m, GP 135 m, ridge 152 m. Per-flight drift / (60 x
+posterior sd): sd 0.78, 95 % coverage 0.97 for the GP (conservative), 1.27 / 0.89 for the ridge.
+
 ## Layout
 
     src/skywind/
