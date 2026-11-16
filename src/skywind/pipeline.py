@@ -101,14 +101,21 @@ def load_observations(settings: Settings, days: list[str]) -> pd.DataFrame:
 
 
 def observation_set(
-    settings: Settings, day: str, use_cross: bool = False, exclude_offset_days: tuple[str, ...] = ()
+    settings: Settings,
+    day: str,
+    use_cross: bool = False,
+    exclude_offset_days: tuple[str, ...] = (),
+    reference: str = "field",
+    min_obs: int = 20,
+    min_days: int = 1,
 ) -> ObsSet:
-    """Observations of a day as an :class:`ObsSet`; with ``use_cross``, heading offsets from the persistent table
-    (optionally excluding days) are applied and cross-heading rows added for the calibrated airframes."""
+    """Observations of a day as an :class:`ObsSet`; with ``use_cross``, heading offsets from the persistent table of
+    ``reference`` (optionally excluding days; at least ``min_obs`` observations on ``min_days`` days per airframe) are
+    applied and cross-heading rows added for the calibrated airframes (the others stay along-only)."""
     w = pd.read_parquet(settings.paths.observations(day))
     if use_cross:
-        table = pd.read_parquet(settings.paths.heading_table())
-        offsets = combine_offsets(table, exclude_offset_days)["offset_deg"]
+        table = pd.read_parquet(settings.paths.heading_table(reference))
+        offsets = combine_offsets(table, exclude_offset_days, min_obs, min_days)["offset_deg"]
         w = apply_heading_offsets(w, offsets)
     return ObsSet.from_frame(w, settings.site, use_cross=use_cross)
 
@@ -139,7 +146,7 @@ def calibrate_step(settings: Settings, day: str, params: GPParams, reference: st
         u_ref[idx] += loo["du"].to_numpy(float)
         v_ref[idx] += loo["dv"].to_numpy(float)
     terms = offset_terms(w, u_ref, v_ref)
-    table = update_table(settings.paths.heading_table(), day, terms, reference)
+    table = update_table(settings.paths.heading_table(reference), day, terms, reference)
     return {"day": day, "airframes": len(terms), "table_rows": len(table), "table_days": int(table["day"].nunique())}
 
 

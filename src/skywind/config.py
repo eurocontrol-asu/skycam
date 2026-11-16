@@ -81,8 +81,12 @@ class Paths(BaseModel):
     def observations(self, day: str) -> Path:
         return self.cache / "observations" / f"obs_{day}.parquet"
 
-    def heading_table(self) -> Path:
-        return self.cache / "calibration" / "heading_offsets_by_day.parquet"
+    def heading_table(self, reference: str = "field") -> Path:
+        """Per-(airframe, day) heading-offset statistics; one table per reference wind (``field`` / ``era5``)."""
+        name = (
+            "heading_offsets_by_day.parquet" if reference == "field" else f"heading_offsets_by_day_{reference}.parquet"
+        )
+        return self.cache / "calibration" / name
 
     def fields(self, day: str) -> Path:
         return self.cache / "fields" / f"wind_{day}.nc"
