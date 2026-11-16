@@ -1,4 +1,4 @@
-# Contributing to skycam
+# Contributing to skyobs
 
 ## Development Setup
 
@@ -7,6 +7,20 @@ git clone https://github.com/eurocontrol-asu/skycam.git
 cd skycam
 make install
 ```
+
+The two members live under `packages/skycam` and `packages/skystatic`.
+Use Python 3.14 for development; both packages require Python 3.12+.
+Run commands from the workspace root. The root pytest configuration covers
+both members and uses importlib to avoid test import collisions.
+
+```bash
+uv run --directory packages/skycam pytest
+uv run --directory packages/skystatic pytest
+uv build --package skycam
+uv build --package skystatic
+```
+
+Keep data, masks, results, build outputs and runtime caches out of Git.
 
 ## Code Quality
 

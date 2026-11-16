@@ -18,9 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
-      - run: uv sync --group docs
-      - run: uv run mkdocs build
+      - run: uv sync --locked --all-packages --group docs
+      - run: uv run --locked mkdocs build --strict -f packages/skycam/mkdocs.yml --site-dir "$PWD/site"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

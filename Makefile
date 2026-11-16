@@ -1,35 +1,34 @@
-.PHONY: install check test format lint audit ci clean docs-serve
+.PHONY: install check test format lint audit ci clean docs-serve help
 
-install:  ## Install all dependencies
-	uv sync --all-groups
+install:  ## Install both members and development tools
+	uv sync --all-packages --all-groups --all-extras
 
 check: lint audit test  ## Run all checks
 
-lint:  ## Linter + type checker
-	uv run ruff check src tests
-	uv run ruff format --check src tests
-	uv run mypy src
+lint:  ## Check both members with their own tool configuration
+	uv run --locked ruff check .
+	uv run --locked ruff format --check .
+	uv run --locked python .github/scripts/workspace_ci.py --mypy
 
-format:  ## Auto-format code
-	uv run ruff format src tests
-	uv run ruff check --fix src tests
+format:  ## Format code using each member's configuration
+	uv run --locked ruff check --fix .
+	uv run --locked ruff format .
 
-test:  ## Run tests with coverage
-	uv run pytest
+test:  ## Run both members with importlib test collection
+	uv run --locked pytest
 
-audit:  ## Security audit
-	uv run pip-audit
+audit:  ## Audit installed dependencies
+	uv run --locked pip-audit
 
-ci: install check  ## Full CI pipeline
+ci: install check  ## Run the local CI checks
 
-clean:  ## Clean artifacts
-	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml dist
+clean:  ## Remove root build and verification artifacts
+	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml dist site
 
-docs-serve:  ## Serve docs locally
-	uv sync --group docs --quiet
-	uv run mkdocs serve
+docs-serve:  ## Serve skycam documentation from the workspace root
+	uv run --locked --group docs mkdocs serve -f packages/skycam/mkdocs.yml
 
-help:  ## Show help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+help:  ## List targets
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-15s %s\n", $$1, $$2}'
 
 .DEFAULT_GOAL := help

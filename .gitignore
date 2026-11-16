@@ -42,3 +42,15 @@ site/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated versions, runtime files and external environment/data links
+.venv
+.cache/
+_version.py
+*.nbi
+*.nbc
+data
+store
+out/
+outputs/
+cache/

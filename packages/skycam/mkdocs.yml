@@ -41,6 +41,7 @@ nav:
   - 🛠️ Guides: guides.md
   - 🧠 Concepts: concepts.md
   - 📚 Reference: reference.md
+  - Calibrated reprojection: reprojection.md
 
 markdown_extensions:
   - admonition

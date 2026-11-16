@@ -1,129 +1,69 @@
-# skycam
+# skyobs
 
-<p align="center">
-  <strong>Camera-agnostic fisheye image projection library for ground-based sky observation</strong>
-</p>
+A uv workspace for ground-based sky observation, with two independent Python packages.
 
-<!-- Canonical Badge Row: Status → Stack → Tooling → Info -->
-<p align="center">
-  <!-- Status -->
-  <a href="https://github.com/eurocontrol-asu/skycam/actions/workflows/ci.yml"><img src="https://github.com/eurocontrol-asu/skycam/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://coveralls.io/github/eurocontrol-asu/skycam?branch=main"><img src="https://coveralls.io/repos/github/eurocontrol-asu/skycam/badge.svg?branch=main" alt="Coverage"></a>
-  <!-- Stack -->
-  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
-  <img src="https://img.shields.io/badge/pydantic-v2-E92063" alt="Pydantic v2">
-  <img src="https://img.shields.io/badge/typed-strict-blue" alt="Typed">
-  <!-- Tooling -->
-  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
-  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"></a>
-  <!-- Info -->
-  <a href="https://pypi.org/project/skycam/"><img src="https://img.shields.io/pypi/v/skycam" alt="PyPI"></a>
-  <img src="https://img.shields.io/badge/license-EUPL--1.2-blue" alt="License">
-  <a href="https://eurocontrol-asu.github.io/skycam/"><img src="https://img.shields.io/badge/docs-live-brightgreen" alt="Docs"></a>
-</p>
+| Package | Purpose | Documentation |
+|---|---|---|
+| [skycam](packages/skycam/) | Calibrated fisheye geometry, image projection and dense sampling maps | [Online documentation](https://eurocontrol-asu.github.io/skycam/) |
+| [skystatic](packages/skystatic/) | Installation and daily static masks from averaged all-sky images | [Method, usage and limitations](packages/skystatic/README.md) |
 
----
+Both packages require **Python 3.12+**. Development uses **Python 3.14**;
+CI tests both members on Python 3.12, 3.13 and 3.14. Python 3.15 remains
+unverified, including the availability of stable dependency wheels.
+The virtual root project is named `skyobs-workspace`; it is not published.
 
-## ✨ Features
+## Development
 
-| Feature | Description |
-|---------|-------------|
-| ⚡ **Numba JIT** | ~100x faster projection via compiled bilinear interpolation |
-| 💾 **Coordinate Cache** | Sub-100ms init after first calibration load |
-| 🛫 **Aircraft Projection** | Vectorized lon/lat/alt → pixel conversion with Shapely support |
-| 🏛️ **Hexagonal Architecture** | Clean separation of domain, adapters, and config |
-| ✅ **Pydantic v2** | Validated settings with environment variable support |
-| 🔬 **Scientific Accuracy** | WGS84 geodesic calculations via GeographicLib |
-
-## 🚀 Installation
+From the workspace root:
 
 ```bash
-uv add skycam
+uv sync
+uv run pytest
+make lint
+uv build --package skycam
+uv build --package skystatic
+uv run --group docs mkdocs serve -f packages/skycam/mkdocs.yml
 ```
 
-Or with pip:
+`uv sync` installs both members and the common development tools. Use
+`uv sync --all-packages --all-groups --all-extras` for all tooling and extras.
+There is one `uv.lock`. Each member keeps its own ruff, mypy and pytest
+configuration. Root pytest uses importlib and collects both configured test
+roots; skystatic uses `tests_skystatic/` to avoid collisions with skycam's
+existing `tests/` package. CI discovers members from `[tool.uv.workspace]`.
 
-```bash
-pip install skycam
-```
+The source packages keep their public import names, `skycam` and `skystatic`.
+Installing `skystatic` alone does not install skycam. Install
+`skystatic[skycam]` to use `SkyGeometry.from_skycam(calibration)`; see the
+[example](packages/skystatic/README.md#skycam-calibration-optional).
 
-## 📖 Quick Start
+## Files and storage
 
-```python
-from pathlib import Path
+Keep image collections, calibrations for real cameras, results, masks, caches
+and environments outside the repository. Local ignored `data` and `store`
+symlinks can point to working and durable storage. The existing small skycam
+fixtures under `packages/skycam/tests/fixtures/` are regression references;
+projection caches are generated in pytest's temporary directory. Synthetic
+skystatic scenes are generated in memory or pytest temporary directories.
+For verification without temporary files in the checkout, pass
+`--basetemp=/path/to/external/scratch` to pytest and `--out-dir` to `uv build`.
 
-from skycam.adapters import JP2CalibrationLoader, load_jp2
-from skycam.domain.models import ProjectionSettings
-from skycam.domain.projection import ProjectionService
+## Versions and publication
 
-# Load calibration and create projector
-loader = JP2CalibrationLoader(Path("calibration"))
-calibration = loader.load("visible")
-projector = ProjectionService(
-    calibration=calibration,
-    settings=ProjectionSettings(),
-)
+Skycam remains the same PyPI distribution. Hatch-vcs reads the repository
+root through `root = "../.."`, retaining the existing `v<version>` release
+convention. Skystatic has an independent `skystatic/v<version>` namespace.
+No skystatic publishing workflow is enabled. Without matching local tags,
+versions are development versions derived from Git, not release numbers.
+Full Git history and release tags must be available in release checkouts;
+CI checks out with `fetch-depth: 0`.
 
-# Project fisheye → regular grid
-projected = projector.project(load_jp2(Path("input.jp2")))
-```
+The PyPI workflow builds and publishes **only skycam**, from
+`packages/skycam`, through the existing `pypi` environment and OIDC Trusted
+Publishing. The PyPI project's trusted publisher must authorize this repository,
+workflow and environment before a release. Local builds never publish.
 
-## 🏗️ Architecture
-
-```mermaid
-flowchart LR
-    subgraph Adapters["Adapters"]
-        CAL[JP2 Calibration]
-        IMG[Image I/O]
-    end
-    
-    subgraph Domain["Domain"]
-        PROJ[ProjectionService]
-        INTERP[Numba Bilinear]
-    end
-    
-    subgraph Config["Config"]
-        SETTINGS[SkycamSettings]
-    end
-    
-    CAL --> PROJ
-    IMG --> PROJ
-    SETTINGS --> PROJ
-    PROJ --> INTERP
-```
-
-## ⚙️ Configuration
-
-Environment variables (prefix: `SKYCAM_`):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SKYCAM_CALIBRATION_DIR` | `calibration` | JP2 calibration files directory |
-| `SKYCAM_CATEGORY` | `visible` | Camera category (`visible`, `infrarouge`) |
-| `SKYCAM_DATA_DIR` | `data` | Input/output data directory |
-
-## 🛠️ Development
-
-```bash
-git clone https://github.com/eurocontrol-asu/skycam.git
-cd skycam
-make install  # uv sync --all-groups
-make check    # lint + audit + test
-```
-
-## 📚 Documentation
-
-**[eurocontrol-asu.github.io/skycam](https://eurocontrol-asu.github.io/skycam/)**
-
-- [🚀 Tutorial](https://eurocontrol-asu.github.io/skycam/tutorial/) — Project your first image in 5 minutes
-- [🛠️ Guides](https://eurocontrol-asu.github.io/skycam/guides/) — How-to recipes for common tasks
-- [🧠 Concepts](https://eurocontrol-asu.github.io/skycam/concepts/) — Architecture and algorithm deep-dive
-- [📚 Reference](https://eurocontrol-asu.github.io/skycam/reference/) — Complete API documentation
-
-## 🤝 Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## 📄 License
-
-EUPL-1.2 — See [LICENSE](LICENSE) for details.
+Skycam's documentation workflow builds `packages/skycam/mkdocs.yml` and keeps
+the existing website structure. Repository renaming, the public documentation
+address, pushing branches and commits, PyPI releases and downstream editable
+path changes remain operator decisions.

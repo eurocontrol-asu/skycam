@@ -1,13 +1,19 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
+        name: ruff check
+        entry: uv run --locked ruff check --fix
+        language: system
+        types: [python]
       - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
-    hooks:
+        name: ruff format
+        entry: uv run --locked ruff format
+        language: system
+        types: [python]
       - id: mypy
-        additional_dependencies: [pydantic]
+        name: mypy (workspace members)
+        entry: uv run --locked python .github/scripts/workspace_ci.py --mypy
+        language: system
+        pass_filenames: false
+        types: [python]

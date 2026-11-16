@@ -5,6 +5,7 @@ and function-scoped fixtures for isolation where needed.
 """
 
 from pathlib import Path
+from shutil import copy2
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -31,9 +32,14 @@ def fixtures_path_session() -> Path:
 
 
 @pytest.fixture(scope="session")
-def calibration_path_session(fixtures_path_session: Path) -> Path:
-    """Return path to calibration fixtures (session-scoped)."""
-    return fixtures_path_session / "calibration"
+def calibration_path_session(
+    fixtures_path_session: Path, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """Copy calibration inputs so projection caches stay outside the source tree."""
+    calibration = tmp_path_factory.mktemp("calibration")
+    for source in (fixtures_path_session / "calibration").glob("*.jp2"):
+        copy2(source, calibration / source.name)
+    return calibration
 
 
 @pytest.fixture(scope="session")

@@ -303,7 +303,7 @@ from skycam.adapters import load_jp2, load_jpg, load_image, save_image
 ## 🛠️ Makefile Commands
 
 ```bash
-make install    # uv sync --all-groups
+make install    # uv sync --all-packages --all-groups --all-extras
 make check      # lint + audit + test
 make lint       # ruff check + ruff format --check + mypy
 make format     # ruff format + ruff check --fix

@@ -6,7 +6,23 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
+  members:
+    name: Discover uv workspace members
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.matrix.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - id: matrix
+        run: python .github/scripts/workspace_ci.py
+
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
@@ -15,8 +31,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
-      - run: uv python install 3.12
-      - run: uv sync --all-groups
+      - run: uv sync --locked --all-packages --all-groups --all-extras
       - run: make lint
 
   security:
@@ -27,31 +42,44 @@ jobs:
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
-      - run: uv python install 3.12
-      - run: uv sync --all-groups
-      - run: uv run pip-audit
+      - run: uv sync --locked --all-packages --all-groups --all-extras
+      - run: uv run --locked pip-audit
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: ${{ matrix.package.name }} (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    needs: members
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        package: ${{ fromJSON(needs.members.outputs.packages) }}
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
-      - run: uv python install ${{ matrix.python-version }}
-      - run: uv sync --all-groups
-      - run: uv run pytest --cov=src --cov-report=xml
+      - run: uv sync --locked --all-packages --all-groups --all-extras
+      - name: Test member
+        working-directory: ${{ matrix.package.path }}
+        env:
+          PACKAGE: ${{ matrix.package.name }}
+        run: uv run --locked --package "$PACKAGE" pytest --cov --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.package.name }}-${{ matrix.python-version }}
+          path: ${{ matrix.package.path }}/coverage.xml
 
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          flag-name: python-${{ matrix.python-version }}
+          file: ${{ matrix.package.path }}/coverage.xml
+          format: cobertura
+          base-path: ${{ matrix.package.path }}
+          flag-name: ${{ matrix.package.name }}-python-${{ matrix.python-version }}
           parallel: true
 
   coverage-finish:
@@ -62,3 +90,40 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           parallel-finished: true
+
+  distributions:
+    name: Build ${{ matrix.package.name }}
+    runs-on: ubuntu-latest
+    needs: members
+    strategy:
+      matrix:
+        package: ${{ fromJSON(needs.members.outputs.packages) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v4
+      - name: Build member distributions
+        env:
+          PACKAGE: ${{ matrix.package.name }}
+        run: uv build --package "$PACKAGE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.package.name }}
+          path: dist/*
+
+  skystatic-standalone:
+    name: skystatic without skycam
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v4
+      - run: uv build --package skystatic --wheel
+      - run: uv venv --python 3.14 /tmp/skystatic-standalone
+      - run: uv pip install --python /tmp/skystatic-standalone/bin/python dist/skystatic-*.whl pytest pytest-mock
+      - name: Test installed wheel without optional dependencies
+        run: |
+          /tmp/skystatic-standalone/bin/python -c 'import importlib.util; assert importlib.util.find_spec("skycam") is None'
+          /tmp/skystatic-standalone/bin/python -m pytest -c packages/skystatic/pyproject.toml packages/skystatic/tests_skystatic

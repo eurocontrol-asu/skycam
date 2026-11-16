@@ -256,5 +256,5 @@ make check
 make test
 
 # Run with coverage
-uv run pytest --cov=src --cov-report=html
+uv run --directory packages/skycam pytest --cov=skycam --cov-report=html
 ```

@@ -1,0 +1,143 @@
+[project]
+name = "skycam"
+dynamic = ["version"]
+description = "Camera-agnostic fisheye image projection library for ground-based sky observation"
+readme = "README.md"
+license = { text = "EUPL-1.2" }
+requires-python = ">=3.12"
+authors = [{ name = "Gabriel Jarry", email = "gabriel.jarry@eurocontrol.int" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+    "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
+]
+dependencies = [
+    "loguru>=0.7.3",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.12.0",
+    # Scientific computing (camera projection)
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "opencv-python>=4.9",
+    "geographiclib>=2.0",
+    "matplotlib>=3.10.8",
+    "scikit-image>=0.26.0",
+    "numba>=0.60",
+    # Geometry (aircraft projection)
+    "shapely>=2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/eurocontrol-asu/skycam"
+Documentation = "https://eurocontrol-asu.github.io/skycam/"
+Repository = "https://github.com/eurocontrol-asu/skycam.git"
+Issues = "https://github.com/eurocontrol-asu/skycam/issues"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^v(?P<version>.+)$"
+
+[tool.hatch.version.raw-options]
+root = "../.."
+git_describe_command = "git describe --dirty --tags --long --match v[0-9]*"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skycam"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "benchmarks", "docs", "mkdocs.yml", "README.md", "LICENSE", "AMENDMENT", "pyproject.toml"]
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/skycam/_version.py"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.24",
+    "pytest-mock>=3.0",
+    "pytest-benchmark>=4.0",
+    "ruff>=0.8",
+    "mypy>=1.14",
+    "pre-commit>=4.0",
+    "pip-audit>=2.0",
+]
+docs = [
+    "mkdocs-material>=9.0",
+    "mkdocstrings[python]>=0.27",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ruff Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+exclude = ["*/_version.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "S", "T20", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["skycam"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MyPy Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["pydantic_settings.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["scipy.*", "cv2", "geographiclib.*", "numba", "shapely", "shapely.*"]
+ignore_missing_imports = true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pytest Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+    "--import-mode=importlib",
+]
+asyncio_mode = "auto"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Coverage Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
