@@ -8,19 +8,25 @@ cd skycam
 make install
 ```
 
-The two members live under `packages/skycam` and `packages/skystatic`.
-Use Python 3.14 for development; both packages require Python 3.12+.
+The three members live under `packages/skycam`, `packages/skystatic` and
+`packages/skywind`.
+Use Python 3.14 for development; all packages require Python 3.12+.
 Run commands from the workspace root. The root pytest configuration covers
-both members and uses importlib to avoid test import collisions.
+all members and uses importlib to avoid test import collisions.
 
 ```bash
 uv run --directory packages/skycam pytest
 uv run --directory packages/skystatic pytest
+uv run --directory packages/skywind pytest
 uv build --package skycam
 uv build --package skystatic
+uv build --package skywind
 ```
 
 Keep data, masks, results, build outputs and runtime caches out of Git.
+Skywind tests needing research stores are skipped unless
+`SKYWIND_TEST_STORES=1` is explicitly set. Never rerun frozen campaigns or
+holdout evaluations as part of routine package checks.
 
 ## Code Quality
 

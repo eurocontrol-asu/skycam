@@ -1,11 +1,11 @@
 .PHONY: install check test format lint audit ci clean docs-serve help
 
-install:  ## Install both members and development tools
+install:  ## Install all members and development tools
 	uv sync --all-packages --all-groups --all-extras
 
 check: lint audit test  ## Run all checks
 
-lint:  ## Check both members with their own tool configuration
+lint:  ## Check all members with their own tool configuration
 	uv run --locked ruff check .
 	uv run --locked ruff format --check .
 	uv run --locked python .github/scripts/workspace_ci.py --mypy
@@ -14,7 +14,7 @@ format:  ## Format code using each member's configuration
 	uv run --locked ruff check --fix .
 	uv run --locked ruff format .
 
-test:  ## Run both members with importlib test collection
+test:  ## Run all members with importlib test collection
 	uv run --locked pytest
 
 audit:  ## Audit installed dependencies

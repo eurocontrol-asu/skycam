@@ -1,14 +1,15 @@
 # skyobs
 
-A uv workspace for ground-based sky observation, with two independent Python packages.
+A uv workspace for ground-based sky observation, with three independent Python packages.
 
 | Package | Purpose | Documentation |
 |---|---|---|
 | [skycam](packages/skycam/) | Calibrated fisheye geometry, image projection and dense sampling maps | [Online documentation](https://eurocontrol-asu.github.io/skycam/) |
 | [skystatic](packages/skystatic/) | Installation and daily static masks from averaged all-sky images | [Method, usage and limitations](packages/skystatic/README.md) |
+| [skywind](packages/skywind/) | Mode S observations, ERA5 wind correction and contrail advection | [Method, configuration and frozen evaluations](packages/skywind/README.md) |
 
-Both packages require **Python 3.12+**. Development uses **Python 3.14**;
-CI tests both members on Python 3.12, 3.13 and 3.14. Python 3.15 remains
+All three packages require **Python 3.12+**. Development uses **Python 3.14**;
+CI tests all members on Python 3.12, 3.13 and 3.14. Python 3.15 remains
 unverified, including the availability of stable dependency wheels.
 The virtual root project is named `skyobs-workspace`; it is not published.
 
@@ -22,20 +23,44 @@ uv run pytest
 make lint
 uv build --package skycam
 uv build --package skystatic
+uv build --package skywind
 uv run --group docs mkdocs serve -f packages/skycam/mkdocs.yml
 ```
 
-`uv sync` installs both members and the common development tools. Use
+`uv sync` installs all three members and the common development tools. Use
 `uv sync --all-packages --all-groups --all-extras` for all tooling and extras.
 There is one `uv.lock`. Each member keeps its own ruff, mypy and pytest
-configuration. Root pytest uses importlib and collects both configured test
-roots; skystatic uses `tests_skystatic/` to avoid collisions with skycam's
-existing `tests/` package. CI discovers members from `[tool.uv.workspace]`.
+configuration. Root pytest uses importlib and collects all configured test
+roots; skystatic uses `tests_skystatic/` and skywind uses `tests_skywind/`
+to avoid collisions with skycam's existing `tests/` package. CI discovers members from `[tool.uv.workspace]`.
 
-The source packages keep their public import names, `skycam` and `skystatic`.
+The source packages keep their public import names: `skycam`, `skystatic` and `skywind`.
 Installing `skystatic` alone does not install skycam. Install
 `skystatic[skycam]` to use `SkyGeometry.from_skycam(calibration)`; see the
 [example](packages/skystatic/README.md#skycam-calibration-optional).
+
+## Skywind configuration and tests
+
+Run `uv run skywind ...` from the workspace root, where `skywind.toml` lives.
+Configuration retains its original precedence: defaults, `skywind.toml`,
+`skywind.local.toml` in the current directory, an explicit Python config file,
+then `SKYWIND_DATA`, `SKYWIND_STORE`, `SKYWIND_PROTOTYPE` and `SKYWIND_GVCCS`.
+The ignored `data`, `store`, `prototype` and `gvccs` links identify local input
+and output locations; they are not included in Git or distributions.
+
+OpenSky acquisition remains optional (`uv sync --package skywind --extra opensky` or install
+`skywind[opensky]`). The tested `pyopensky>=2.16,<2.17` constraint is retained.
+Installing skywind alone does not install skycam or skystatic.
+
+Default tests include synthetic unit, temporary-file integration and CLI cases.
+Six skywind tests tagged `requires_store` are skipped even when local data links
+exist. To opt into those tests explicitly, configure the stores and run:
+
+```bash
+SKYWIND_TEST_STORES=1 uv run pytest -c packages/skywind/pyproject.toml packages/skywind/tests_skywind -m requires_store
+```
+
+Importing the package does not rerun frozen evaluations or tune their parameters.
 
 ## Files and storage
 
@@ -52,9 +77,14 @@ For verification without temporary files in the checkout, pass
 
 Skycam remains the same PyPI distribution. Hatch-vcs reads the repository
 root through `root = "../.."`, retaining the existing `v<version>` release
-convention. Skystatic has an independent `skystatic/v<version>` namespace.
-No skystatic publishing workflow is enabled. Without matching local tags,
+convention. Skystatic and skywind have independent `skystatic/v<version>` and
+`skywind/v<version>` namespaces. No publishing workflow is enabled for either.
+Without matching local tags,
 versions are development versions derived from Git, not release numbers.
+Skywind's complete source history is retained, including the original commits
+referenced by `frozen-v1` and `frozen-v1.1`. Their IDs and historical lockfiles
+remain accessible through Git; the original source checkout and tags are kept
+intact. Frozen research configurations are not release-version tags.
 Full Git history and release tags must be available in release checkouts;
 CI checks out with `fetch-depth: 0`.
 

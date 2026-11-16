@@ -1,0 +1,15 @@
+# skywind configuration (committed). Paths are relative to the repository: `data` and `store` are gitignored symlinks
+# (data -> working data, store -> durable data). Override per machine in skywind.local.toml (gitignored) or with
+# SKYWIND_DATA / SKYWIND_STORE / SKYWIND_PROTOTYPE / SKYWIND_GVCCS.
+
+[paths]
+data_root = "data"
+store_root = "store"
+campaign = "20261113-skywind"
+prototype_dir = "prototype"
+gvccs_dir = "gvccs"
+
+[sources]
+remote_host = "mandrell"
+opensky_pattern = "/data/contrailnet/flights/opensky/{Y}/{Y}-{m}-{d}.parquet"
+era5_pattern = "/data/contrailnet/weather/era5/{Y}/{Y}_{m}_{d}.pl.nc"

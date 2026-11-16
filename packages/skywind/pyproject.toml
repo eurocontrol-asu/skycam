@@ -1,0 +1,105 @@
+[project]
+name = "skywind"
+dynamic = ["version"]
+description = "Cruise-altitude wind reconstruction above a ground camera: ERA5 corrected with Mode S (Comm-B) derived winds"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "pandas>=2.2",
+    "pyarrow>=15",
+    "xarray>=2024.1",
+    "netcdf4>=1.6",
+    "pydantic>=2.6",
+    "cyclopts>=4.5",
+    "ppigrf>=2.1",
+    "pycontrails>=0.54",
+    "threadpoolctl>=3.8.0",
+    "pillow>=13.0.0",
+    "matplotlib>=3.11.2",
+]
+
+[project.optional-dependencies]
+opensky = [
+    "pyopensky>=2.16,<2.17",
+]
+
+[project.urls]
+Homepage = "https://github.com/eurocontrol-asu/skycam/tree/main/packages/skywind"
+Documentation = "https://github.com/eurocontrol-asu/skycam/blob/main/packages/skywind/README.md"
+Repository = "https://github.com/eurocontrol-asu/skycam.git"
+Issues = "https://github.com/eurocontrol-asu/skycam/issues"
+
+[project.scripts]
+skywind = "skywind.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.11", "pandas-stubs", "scipy-stubs"]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.1.0"
+tag-pattern = "^skywind/v(?P<version>.+)$"
+
+[tool.hatch.version.raw-options]
+root = "../.."
+git_describe_command = "git describe --dirty --tags --long --match skywind/v[0-9]*"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skywind"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests_skywind"]
+addopts = "--import-mode=importlib --strict-markers"
+markers = [
+    "integration: real I/O (temporary files or data stores)",
+    "requires_store: needs research stores; opt in with SKYWIND_TEST_STORES=1",
+    "e2e: command-line, subprocess",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests_skywind"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "S", "T20", "RUF", "C90"]
+ignore = ["N803", "N806"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 9
+
+[tool.ruff.lint.per-file-ignores]
+"tests_skywind/**" = ["S101", "S603", "S607"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["skywind"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src/skywind"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["threadpoolctl.*", "ppigrf.*", "pycontrails.*", "pyopensky.*", "sqlalchemy.*", "netCDF4.*", "xarray.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["skywind"]
+
+[tool.coverage.xml]
+output = "coverage.xml"

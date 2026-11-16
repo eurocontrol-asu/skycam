@@ -54,3 +54,8 @@ store
 out/
 outputs/
 cache/
+
+# Local skywind input links and machine-specific configuration
+/prototype
+/gvccs
+/skywind.local.toml

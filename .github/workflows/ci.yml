@@ -51,6 +51,7 @@ jobs:
     needs: members
     env:
       UV_PYTHON: ${{ matrix.python-version }}
+      SKYWIND_TEST_STORES: "0"
     strategy:
       fail-fast: false
       matrix:
@@ -127,3 +128,21 @@ jobs:
         run: |
           /tmp/skystatic-standalone/bin/python -c 'import importlib.util; assert importlib.util.find_spec("skycam") is None'
           /tmp/skystatic-standalone/bin/python -m pytest -c packages/skystatic/pyproject.toml packages/skystatic/tests_skystatic
+
+  skywind-standalone:
+    name: skywind without other workspace members or OpenSky
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v4
+      - run: uv build --package skywind --wheel
+      - run: uv venv --python 3.14 /tmp/skywind-standalone
+      - run: uv pip install --python /tmp/skywind-standalone/bin/python dist/skywind-*.whl pytest
+      - name: Test installed wheel without optional dependencies or stores
+        env:
+          SKYWIND_TEST_STORES: "0"
+        run: |
+          /tmp/skywind-standalone/bin/python -c 'import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ("skycam", "skystatic", "pyopensky"))'
+          /tmp/skywind-standalone/bin/python -m pytest -c packages/skywind/pyproject.toml packages/skywind/tests_skywind

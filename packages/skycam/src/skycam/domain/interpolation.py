@@ -14,7 +14,7 @@ from numba import jit, prange
 from numpy.typing import NDArray
 
 
-@jit(nopython=True, parallel=True, cache=True, fastmath=True)  # type: ignore[untyped-decorator]
+@jit(nopython=True, parallel=True, cache=True, fastmath=True)
 def bilinear_sample(
     image: NDArray[np.uint8],
     coords: NDArray[np.float64],
@@ -72,7 +72,7 @@ def bilinear_sample(
     return result
 
 
-@jit(nopython=True, parallel=True, cache=True, fastmath=True)  # type: ignore[untyped-decorator]
+@jit(nopython=True, parallel=True, cache=True, fastmath=True)
 def bilinear_sample_grayscale(
     image: NDArray[np.uint8],
     coords: NDArray[np.float64],
