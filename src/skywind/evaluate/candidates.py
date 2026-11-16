@@ -111,7 +111,8 @@ def _across(settings: Settings, day: str, est: GPEstimator) -> pd.DataFrame:
     frame = pd.DataFrame(
         {"day": day, "icao24": w["icao24"].to_numpy()[rows], "y": w["d_right"].to_numpy()[rows], "pred": pred}
     )
-    return frame[ok].reset_index(drop=True)
+    result: pd.DataFrame = frame[ok].reset_index(drop=True)
+    return result
 
 
 def _across_scores(c: pd.DataFrame) -> pd.DataFrame:
