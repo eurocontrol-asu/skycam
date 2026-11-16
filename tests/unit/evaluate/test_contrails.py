@@ -52,3 +52,19 @@ def test_paired_tables() -> None:
     ages = age_table({"era5": e1, "gp": e2}, fits)
     pooled = ages[(ages["day"] == "pooled") & (ages["method"] == "gp")]
     assert (pooled["drift_only_med"] < 200).all()
+
+
+def test_paired_tests_one_sided() -> None:
+    from skywind.evaluate.contrails import paired_tests
+
+    paired = pd.DataFrame(
+        {
+            "day": "d",
+            "flight": [str(i) for i in range(12)],
+            "drift_era5": np.linspace(20, 80, 12),
+            "drift_gp": np.linspace(5, 30, 12),
+        }
+    )
+    t = paired_tests(paired).set_index("day")
+    assert t.loc["pooled", "n_improved"] == 12
+    assert t.loc["pooled", "wilcoxon_p"] < 0.01 and t.loc["pooled", "sign_test_p"] < 0.01
