@@ -274,13 +274,21 @@ def ridge(
 
 
 @evaluate_app.command
-def candidates(
-    twoscale_run: Path | None = None, days: Days = None, skip_b: bool = False, config: Config = None
-) -> None:
-    """Milestone 3 candidates on the dev days (two-scale field, EMADDC across-heading) and the adoption rule."""
-    from skywind.evaluate.campaign import candidates_campaign
+def candidate_cross(days: Days = None, config: Config = None) -> None:
+    """Candidate C2 (EMADDC across-heading) on the dev days, with the declared adoption rule."""
+    from skywind.evaluate.campaign import cross_candidate_campaign
 
-    _print(candidates_campaign(_settings(config), twoscale_run, days, skip_b))
+    _print(cross_candidate_campaign(_settings(config), days))
+
+
+@evaluate_app.command
+def candidate_twoscale(
+    twoscale_run: Path, frozen_b_run: Path, frozen_a_run: Path, days: Days = None, config: Config = None
+) -> None:
+    """Candidate C1 (two-scale field) on the dev days, with the declared adoption rule."""
+    from skywind.evaluate.campaign import twoscale_candidate_campaign
+
+    _print(twoscale_candidate_campaign(_settings(config), twoscale_run, frozen_b_run, frozen_a_run, days))
 
 
 @evaluate_app.command

@@ -60,16 +60,21 @@ def emaddc_obs(settings: Settings, day: str) -> ObsSet:
     return observation_set(settings, day, True, (day,), "era5", MIN_OBS, MIN_DAYS)
 
 
-def estimator_factory(settings: Settings, twoscale_fits: Path | None) -> Callable[[str], dict[str, ResidualEstimator]]:
+def estimator_factory(
+    settings: Settings, twoscale_fits: Path | None, include: Sequence[str] = ("frozen", "cross", "twoscale")
+) -> Callable[[str], dict[str, ResidualEstimator]]:
     """Per dev day: frozen-v1, the across-heading candidate and (if fitted) the two-scale candidate."""
 
     def build(day: str) -> dict[str, ResidualEstimator]:
         p = GPParams.from_config(settings.gp)
-        out: dict[str, ResidualEstimator] = {
-            "gp_frozen": GPEstimator(observation_set(settings, day), p, **_kw(settings)),
-            "gp_cross_emaddc": GPEstimator(emaddc_obs(settings, day), cross_params(settings, day), **_kw(settings)),
-        }
-        if twoscale_fits is not None:
+        out: dict[str, ResidualEstimator] = {}
+        if "frozen" in include:
+            out["gp_frozen"] = GPEstimator(observation_set(settings, day), p, **_kw(settings))
+        if "cross" in include:
+            out["gp_cross_emaddc"] = GPEstimator(
+                emaddc_obs(settings, day), cross_params(settings, day), **_kw(settings)
+            )
+        if twoscale_fits is not None and "twoscale" in include:
             fits = pd.read_csv(twoscale_fits, dtype={"held_out": str})
             row = fits[fits["held_out"] == day].iloc[0].to_dict()
             q = replace(p, **{k: row[k] for k in p.as_dict() if k in row and pd.notna(row[k])})

@@ -302,9 +302,10 @@ def run_contrails(
             errors.setdefault(k, []).append(e)
         for k, s in res["stds"].items():
             stds.setdefault(k, []).append(s)
-    return summarise_contrails(
-        {k: pd.concat(v) for k, v in errors.items()}, {k: pd.concat(v) for k, v in stds.items()}, out
-    )
+    keys = ["day", "flight", "flight_id", "waypoint", "time"]
+    merged = {k: pd.concat(v).drop_duplicates(keys) for k, v in errors.items()}
+    merged_sd = {k: pd.concat(v).drop_duplicates(["day", "flight"]) for k, v in stds.items()}
+    return summarise_contrails(merged, merged_sd, out)
 
 
 def summarise_contrails(
@@ -389,9 +390,10 @@ def merge_contrail_runs(runs: Sequence[Path], out: Path) -> dict[str, pd.DataFra
             errors.setdefault(f.stem.removeprefix("errors_"), []).append(pd.read_parquet(f))
         for f in run.glob("stds_*.parquet"):
             stds.setdefault(f.stem.removeprefix("stds_"), []).append(pd.read_parquet(f))
-    return summarise_contrails(
-        {k: pd.concat(v) for k, v in errors.items()}, {k: pd.concat(v) for k, v in stds.items()}, out
-    )
+    keys = ["day", "flight", "flight_id", "waypoint", "time"]
+    merged = {k: pd.concat(v).drop_duplicates(keys) for k, v in errors.items()}
+    merged_sd = {k: pd.concat(v).drop_duplicates(["day", "flight"]) for k, v in stds.items()}
+    return summarise_contrails(merged, merged_sd, out)
 
 
 def frozen_estimators(settings: Settings, day_variances: bool = False) -> Callable[[str], dict[str, ResidualEstimator]]:
