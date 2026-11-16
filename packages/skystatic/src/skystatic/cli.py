@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -10,6 +11,7 @@ import cyclopts
 
 from skystatic.frames import open_source
 from skystatic.geometry import SkyGeometry
+from skystatic.installation import FrozenInstallation, freeze_installation
 from skystatic.pipeline import StaticConfig, run
 
 __all__ = ["app", "main"]
@@ -36,6 +38,9 @@ def run_command(
         str | None, cyclopts.Parameter(help="File name pattern, e.g. '*_160.jpg'")
     ] = None,
     cache: Annotated[Path | None, cyclopts.Parameter(help="Cache of per-day averages")] = None,
+    installation: Annotated[
+        Path | None, cyclopts.Parameter(help="Frozen installation NPZ; replaces reference voting")
+    ] = None,
     aggregate: Annotated[Literal["mean", "geometric"], cyclopts.Parameter()] = "geometric",
     parts: Annotated[int, cyclopts.Parameter(help="Parts of a day that must agree")] = 3,
     max_side: Annotated[int, cyclopts.Parameter(help="0 = native resolution")] = 1232,
@@ -63,6 +68,9 @@ def run_command(
             output,
             reference=[open_source(day, pattern) for day in reference or []],
             cache=cache,
+            installation=None
+            if installation is None
+            else FrozenInstallation.from_file(installation),
         )
     except (ValueError, KeyError, OSError) as exc:
         print(f"skystatic: {exc}", file=sys.stderr)  # noqa: T201
@@ -75,6 +83,34 @@ def run_command(
             f"variable {100 * day.variable_fraction:.3f}% in {day.variable_components} "
             f"components ({day.frames_daytime} daytime frames){note}"
         )
+
+
+@app.command(name="freeze")
+def freeze_command(
+    output: Annotated[Path, cyclopts.Parameter(help="Existing run with masks and report.json")],
+    destination: Annotated[
+        Path, cyclopts.Parameter(help="New installation NPZ; never overwritten")
+    ],
+    *,
+    camera_id: str,
+    version: str,
+    valid_from: date,
+    valid_until: Annotated[date, cyclopts.Parameter(help="Exclusive end of validity")],
+) -> None:
+    """Freeze an installation for one camera and period, without recalculating masks."""
+    try:
+        artifact = freeze_installation(
+            output,
+            destination,
+            camera_id=camera_id,
+            version=version,
+            valid_from=valid_from,
+            valid_until=valid_until,
+        )
+    except (ValueError, KeyError, OSError) as exc:
+        print(f"skystatic: {exc}", file=sys.stderr)  # noqa: T201
+        raise SystemExit(1) from exc
+    print(f"installation: {artifact.metadata.artifact_id}")  # noqa: T201
 
 
 def main() -> None:

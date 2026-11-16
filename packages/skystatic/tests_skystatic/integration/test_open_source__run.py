@@ -9,7 +9,15 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from skystatic import SkyGeometry, StaticConfig, ZipSource, open_source, run
+from skystatic import (
+    SkyGeometry,
+    StaticConfig,
+    ZipSource,
+    load_day_mask,
+    open_source,
+    run,
+    sky_mask,
+)
 from tests_skystatic.conftest import DIRT, STRUCTURE, write_day, write_zip_day, zenith_map
 
 pytestmark = pytest.mark.integration
@@ -180,3 +188,9 @@ def test_a_foggy_processed_day_is_flagged(tmp_path: Path) -> None:
         reference=[open_source(f) for f in folders],
     )
     assert [d.skyline_visible for d in report.days] == [False, True]
+    assert [d.variable_reliable for d in report.days] == [False, True]
+    product = load_day_mask(tmp_path / "out/classes_2024-01-09.png")
+    assert not product.metadata.skyline_visible
+    assert not product.metadata.variable_reliable
+    with pytest.raises(ValueError, match="unreliable daily mask"):
+        sky_mask(tmp_path / "out", datetime(2024, 1, 9, 12), (96, 96))

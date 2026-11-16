@@ -45,6 +45,53 @@ def test_run_writes_masks_and_report(tmp_path: Path, zenith_file: Path) -> None:
     assert (tmp_path / "out" / "installation.png").exists()
 
 
+def test_freeze_and_reuse_from_cli(tmp_path: Path, zenith_file: Path) -> None:
+    reference = write_day(tmp_path / "raw/reference", datetime(2024, 1, 1, 9))
+    first = skystatic(
+        "run",
+        str(reference),
+        "--zenith",
+        str(zenith_file),
+        "--output",
+        str(tmp_path / "baseline"),
+        "--max-side",
+        "0",
+    )
+    assert first.returncode == 0, first.stderr
+    frozen = skystatic(
+        "freeze",
+        str(tmp_path / "baseline"),
+        str(tmp_path / "camera-v1.npz"),
+        "--camera-id",
+        "test-camera",
+        "--version",
+        "v1",
+        "--valid-from",
+        "2024-01-01",
+        "--valid-until",
+        "2025-01-01",
+    )
+    assert frozen.returncode == 0, frozen.stderr
+    day = write_day(tmp_path / "raw/day", datetime(2024, 5, 10, 9), dirty=True)
+    reused = skystatic(
+        "run",
+        str(day),
+        "--zenith",
+        str(zenith_file),
+        "--output",
+        str(tmp_path / "daily"),
+        "--max-side",
+        "0",
+        "--installation",
+        str(tmp_path / "camera-v1.npz"),
+    )
+    assert reused.returncode == 0, reused.stderr
+    report = json.loads((tmp_path / "daily/report.json").read_text())
+    assert report["installation_id"].startswith("test-camera/v1/")
+    assert report["reference_days"] == ["2024-01-01"]
+    assert report["days"][0]["variable_components"] >= 1
+
+
 def test_missing_input_fails_with_a_message(tmp_path: Path, zenith_file: Path) -> None:
     result = skystatic(
         "run", str(tmp_path / "nowhere"), "--zenith", str(zenith_file), "--output", str(tmp_path)

@@ -37,7 +37,18 @@ uv run skystatic run DAY [DAY ...] --zenith zenith.npz --output out/ \
 ```
 
 A day is a folder of images or a zip archive of images; file names must hold a
-`YYYYMMDDhhmmss` timestamp. The day label is the ISO date of those timestamps,\nregardless of the directory or archive name (for example `2023/10/12` becomes\n`2023-10-12`). Empty sources, sources spanning several dates, and duplicate day\nlabels or dates fail before any cache lookup or output write. The same source\nmay be both a processed day and a reference. Explicit Python labels must also\nbe unique. A run describes one camera.\n\nCaches identify the source path, selected images, file revisions and aggregation\nparameters. Old caches keyed only by a folder name are not reused. Removing or\nmodifying images invalidates their cache; a cache is not an archive of the inputs.\n\nThe zenith map is a `.npy`, or one array of a `.npz`
+`YYYYMMDDhhmmss` timestamp. The day label is the ISO date of those timestamps,
+regardless of the directory or archive name (for example `2023/10/12` becomes
+`2023-10-12`). Empty sources, sources spanning several dates, and duplicate day
+labels or dates fail before any cache lookup or output write. The same source
+may be both a processed day and a reference. Explicit Python labels must also
+be unique. A run describes one camera.
+
+Caches identify the source path, selected images, file revisions and aggregation
+parameters. Old caches keyed only by a folder name are not reused. Removing or
+modifying images invalidates their cache; a cache is not an archive of the inputs.
+
+The zenith map is a `.npy`, or one array of a `.npz`
 (`--zenith-key`, `--zenith-unit deg|rad`), at the native size of the frames or any size with the
 same aspect ratio.
 
@@ -68,6 +79,70 @@ report = run(
 ```
 
 `skystatic.evaluate.agreement` compares a mask with a reference mask of the same camera.
+The [evaluation protocol](docs/evaluation.md) explains how to measure missed dirt
+and false detections without selecting thresholds on the final test cases.
+
+## Consume a daily mask
+
+```python
+from datetime import datetime
+from pathlib import Path
+from skystatic import load_day_mask, sky_mask
+
+sky = sky_mask(Path("masks"), datetime(2024, 5, 10, 12, 30), size=(2464, 2464))
+# bool array of shape (height, width): True only for class 0 (sky).
+product = load_day_mask(Path("masks/classes_2024-05-10.png"))
+print(product.metadata.skyline_visible, product.metadata.variable_reliable)
+```
+
+Dates follow the clock/calendar in the image filenames; there is no implicit
+UTC or local-time conversion. Selection requires the exact date: there is no
+nearest-day or installation-only fallback. Two products for the same date are
+an error. Resizing uses nearest neighbours and requires the same aspect ratio.
+Classes 1 (installation), 2 (daily static) and 3 (outside domain) are all excluded.
+
+Each daily PNG embeds JSON in its `skystatic` text field: schema version, date,
+label, `skyline_visible`, `variable_reliable` and frozen `installation_id`, if
+used. Quality is available without `report.json`. A missing skyline sets both
+flags false; `sky_mask` raises unless `allow_unreliable=True` is explicit.
+This is a conservative quality gate, not a measured confidence score or a claim
+that every faint spot has been found. The class pixels themselves are unchanged.
+Legacy PNGs without metadata are refused and must be regenerated in a fresh
+output directory. Previously overwritten products cannot be recovered by this fix.
+
+## Freeze and reuse an installation
+
+Choose and review reference days for one camera, then freeze that run explicitly:
+
+```bash
+uv run skystatic freeze /data/path/reference-run /data/path/camera-v1.npz \
+    --camera-id CAMERA --version v1 \
+    --valid-from 2023-01-01 --valid-until 2027-01-01
+uv run skystatic run DAY --zenith zenith.npz --output /data/path/day-run \
+    --installation /data/path/camera-v1.npz
+```
+
+The dates above are examples; choose the validity period from the camera's
+installation history. `valid_from` is inclusive and `valid_until` exclusive.
+Freezing reads an existing run without computing new masks. The NPZ contains the
+installation classes, original reference votes, reference-day provenance,
+calibration identity, parameters, camera ID, version, validity period and a
+SHA-256 over provenance and arrays. It is loaded without pickle and its checksum
+is verified. Creation is atomic and refuses to overwrite an existing file.
+Keep this artifact in durable storage, outside Git, with the reviewed reference
+selection and its evaluation; use a new version for a new baseline.
+
+A run with `--installation` does not vote again. It checks the calibration,
+segmentation parameters, image dimensions and date validity, and refuses
+`--reference` at the same time. Its `reference_votes.png` reproduces the original
+votes. Reports and daily PNGs carry the complete installation identifier
+(camera/version/content hash). Worker counts, voting thresholds and daily slack
+do not change the frozen pixels. A new camera geometry or work resolution
+requires a new reviewed artifact. No real-camera baseline or validity period is
+automatically chosen by this software change.
+
+Python offers the same operations through `freeze_installation(...)`,
+`FrozenInstallation.from_file(...)` and `run(..., installation=artifact)`.
 
 ## What it was checked on (2026-11-13)
 
@@ -91,8 +166,9 @@ drops of 2023-10-01/02 as well.
 
 - **Fog or a white-out day has no visible skyline**: the sky leaks into the installation of
   that day. Such a reference day is dropped from the vote (`rejected_reference_days`), such a
-  processed day is flagged (`skyline_visible: false`); its variable static inside the sky stays
-  valid (site camera: 2023-10-03 and the reference day 2024-02-02).
+  processed day is flagged (`skyline_visible: false`, `variable_reliable: false`). The pixel classes are
+  preserved for inspection, but automatic consumers refuse the daily mask unless
+  explicitly opted in (site camera: 2023-10-03 and the reference day 2024-02-02).
 - **The reference period decides what "installation" means.** Dirt that lasts longer than
   60 % of the reference days becomes installation; trees that lose their leaves change the
   installation with the season.

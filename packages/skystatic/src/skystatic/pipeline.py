@@ -7,6 +7,7 @@ import json
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
@@ -20,7 +21,9 @@ from scipy.ndimage import label
 from skystatic.aggregate import Aggregates, aggregate_parts, daytime_frames, frame_size
 from skystatic.frames import FrameSource, source_date, source_fingerprint
 from skystatic.geometry import SkyGeometry
+from skystatic.installation import FrozenInstallation, installation_digest
 from skystatic.masks import CLASS_NAMES, class_map, installation_mask, variable_mask
+from skystatic.products import MaskMetadata, png_metadata
 from skystatic.render import overlay
 from skystatic.segment import static_mask_all_parts
 
@@ -79,6 +82,8 @@ class DayResult:
 
 class DayReport(BaseModel):
     label: str
+    date: str
+    variable_reliable: bool
     frames_daytime: int
     frames_total: int
     static_fraction: float
@@ -89,6 +94,8 @@ class DayReport(BaseModel):
 
 class RunReport(BaseModel):
     config: StaticConfig
+    geometry_sha256: str
+    installation_id: str | None = None
     size_wh: tuple[int, int]
     reference_days: list[str]
     rejected_reference_days: list[str]
@@ -204,6 +211,37 @@ def _unique_sources(
     return unique
 
 
+def _geometry_fingerprint(geometry: SkyGeometry) -> str:
+    values = geometry.zenith_deg.astype("<f8")
+    return hashlib.sha256(str(values.shape).encode() + values.tobytes()).hexdigest()
+
+
+def _check_installation(
+    installation: FrozenInstallation,
+    days: Sequence[FrameSource],
+    geometry: SkyGeometry,
+    config: StaticConfig,
+) -> None:
+    metadata = installation.metadata
+    if installation_digest(metadata, installation.classes, installation.votes) != metadata.sha256:
+        raise ValueError("Frozen installation checksum mismatch")
+    if metadata.geometry_sha256 != _geometry_fingerprint(geometry):
+        raise ValueError("Frozen installation has a different camera geometry")
+    ignored = {"workers", "jobs", "min_days", "outlier_ratio", "tolerance"}
+    parameters = config.model_dump(mode="json")
+    mismatched = [
+        key
+        for key, value in parameters.items()
+        if key not in ignored and metadata.parameters.get(key) != value
+    ]
+    if mismatched:
+        raise ValueError(f"Frozen installation has incompatible parameters: {mismatched}")
+    for source in days:
+        day = date.fromisoformat(source_date(source))
+        if not metadata.valid_from <= day < metadata.valid_until:
+            raise ValueError(f"{day}: outside frozen installation validity period")
+
+
 def run(
     days: Sequence[FrameSource],
     geometry: SkyGeometry,
@@ -211,6 +249,8 @@ def run(
     output: Path,
     reference: Sequence[FrameSource] = (),
     cache: Path | None = None,
+    *,
+    installation: FrozenInstallation | None = None,
 ) -> RunReport:
     """Masks for ``days``; the installation is voted on ``reference`` (default: ``days``).
 
@@ -220,6 +260,10 @@ def run(
     """
     if not days:
         raise ValueError("No day to process")
+    if installation is not None:
+        if reference:
+            raise ValueError("Choose a frozen installation or reference days, not both")
+        _check_installation(installation, days, geometry, config)
     unique = _unique_sources(days, reference)
     with ThreadPoolExecutor(config.jobs) as pool:
         computed = pool.map(lambda s: compute_day(s, geometry, config, cache), unique.values())
@@ -227,46 +271,70 @@ def run(
     shapes = {r.mask.shape for r in results.values()}
     if len(shapes) != 1:
         raise ValueError(f"Days have different image sizes: {sorted(shapes)}")
-    candidates = [results[s.label] for s in (reference or days)]
-    voters, rejected = _usable_reference(candidates, config.outlier_ratio)
-    installation = installation_mask([r.mask for r in voters], config.min_days)
-    votes = np.sum([r.mask for r in voters], axis=0).astype(np.uint8)
-    domain = voters[0].domain
-    height, width = installation.shape
+    if installation is None:
+        candidates = [results[s.label] for s in (reference or days)]
+        voters, rejected = _usable_reference(candidates, config.outlier_ratio)
+        fixed = installation_mask([r.mask for r in voters], config.min_days)
+        votes = np.sum([r.mask for r in voters], axis=0).astype(np.uint8)
+        domain = voters[0].domain
+        reference_days = [r.label for r in voters]
+        rejected_days = [r.label for r in rejected]
+    else:
+        fixed = installation.classes == 1
+        domain = installation.classes != 3
+        votes = installation.votes
+        reference_days = installation.metadata.reference_days
+        rejected_days = installation.metadata.rejected_reference_days
+        if fixed.shape != next(iter(results.values())).mask.shape:
+            raise ValueError("Frozen installation and daily images have different sizes")
+    height, width = fixed.shape
     output.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(class_map(domain, installation)).save(output / "installation.png")
+    Image.fromarray(class_map(domain, fixed)).save(output / "installation.png")
     Image.fromarray(votes).save(output / "reference_votes.png")
     tolerance = _scaled_tolerance(config, width)
     reports = []
     for source in days:
         result = results[source.label]
-        variable = variable_mask(result.mask, installation, tolerance)
-        classes = class_map(domain, installation, variable)
-        Image.fromarray(classes).save(output / f"classes_{result.label}.png")
+        variable = variable_mask(result.mask, fixed, tolerance)
+        classes = class_map(domain, fixed, variable)
+        visible = bool(
+            fixed.any() and (result.mask & fixed).sum() >= config.outlier_ratio * fixed.sum()
+        )
+        metadata = MaskMetadata(
+            day=date.fromisoformat(source_date(source)),
+            label=result.label,
+            skyline_visible=visible,
+            variable_reliable=visible,
+            installation_id=None if installation is None else installation.metadata.artifact_id,
+        )
+        Image.fromarray(classes).save(
+            output / f"classes_{result.label}.png", pnginfo=png_metadata(metadata)
+        )
         Image.fromarray(overlay(result.image, classes)).save(
             output / f"overlay_{result.label}.jpg", quality=90
         )
         reports.append(
             DayReport(
                 label=result.label,
+                date=metadata.day.isoformat(),
+                variable_reliable=visible,
                 frames_daytime=result.frames_daytime,
                 frames_total=result.frames_total,
                 static_fraction=result.static_fraction,
                 variable_fraction=float(variable.sum() / max(int(domain.sum()), 1)),
                 variable_components=int(label(variable, structure=np.ones((3, 3)))[1]),
-                # Fog hides the skyline: the sky then leaks into the installation. The variable
-                # static inside the sky is still valid, the day must just not serve as reference.
-                skyline_visible=bool(
-                    (result.mask & installation).sum() >= config.outlier_ratio * installation.sum()
-                ),
+                # Preserve the mask, while exposing a conservative quality flag to consumers.
+                skyline_visible=visible,
             )
         )
     report = RunReport(
         config=config,
+        geometry_sha256=_geometry_fingerprint(geometry),
+        installation_id=None if installation is None else installation.metadata.artifact_id,
         size_wh=(width, height),
-        reference_days=[r.label for r in voters],
-        rejected_reference_days=[r.label for r in rejected],
-        installation_fraction=float(installation.sum() / max(int(domain.sum()), 1)),
+        reference_days=reference_days,
+        rejected_reference_days=rejected_days,
+        installation_fraction=float(fixed.sum() / max(int(domain.sum()), 1)),
         classes=CLASS_NAMES,
         days=reports,
     )

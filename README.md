@@ -35,6 +35,10 @@ roots; skystatic uses `tests_skystatic/` and skywind uses `tests_skywind/`
 to avoid collisions with skycam's existing `tests/` package. CI discovers members from `[tool.uv.workspace]`.
 
 The source packages keep their public import names: `skycam`, `skystatic` and `skywind`.
+Skystatic identifies days from image timestamps and provides `sky_mask(...)`
+for exact-date, size-aware consumption, with quality metadata inside each PNG.
+Its installation can be frozen and reused per camera and validity period; see
+[consumer and installation usage](packages/skystatic/README.md#consume-a-daily-mask).
 Installing `skystatic` alone does not install skycam. Install
 `skystatic[skycam]` to use `SkyGeometry.from_skycam(calibration)`; see the
 [example](packages/skystatic/README.md#skycam-calibration-optional).
