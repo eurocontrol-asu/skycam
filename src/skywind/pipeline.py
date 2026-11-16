@@ -161,13 +161,13 @@ def fitted_field(
     params: GPParams,
     method: str = "gp",
     use_cross: bool = False,
-    day_variances: bool = True,
+    day_variances: bool = False,
 ) -> CorrectedWind:
     """ERA5 + residual estimator built from the day's observations.
 
-    With ``day_variances`` (GP only), the field, bias and noise variances are re-estimated by marginal likelihood on
-    the day's own aircraft data (length scales unchanged): the residual amplitude varies from day to day and this keeps
-    the posterior uncertainty calibrated (evaluation A, variant gp_matern_dayvar)."""
+    With ``day_variances`` (GP only, off by default), the field, bias and noise variances are re-estimated by marginal
+    likelihood on the day's own aircraft data (length scales unchanged). It improved the per-day calibration on the dev
+    days but not the skill on the holdout days (0.486 vs 0.499): the frozen configuration does not use it."""
     obs = observation_set(settings, day, use_cross)
     if method == "gp" and day_variances and len(obs) >= 50:
         params = fit_gp([obs], params, only=DAY_VARIANCES, workers=settings.max_workers).params

@@ -49,12 +49,21 @@ def days(set_name: str | None = None, config: Config = None) -> None:
 
 
 @app.command
-def acquire(day: str, windows: str, overwrite: bool = False, config: Config = None) -> None:
+def acquire(
+    day: str,
+    windows: str,
+    overwrite: bool = False,
+    set_name: str = "new",
+    padding_min: float | None = None,
+    config: Config = None,
+) -> None:
     """Fetch state vectors, ERA5 and Comm-B of a new DAY for WINDOWS ('HH:MM-HH:MM[;...]') into the input store."""
     from skywind.acquire import acquire_day, default_file_sources, register_day
     from skywind.sources.opensky_trino import TrinoCommB
 
     s = _settings(config)
+    if padding_min is not None:
+        s.sources.commb_padding_min = padding_min
     d = parse_day(day)
     try:
         rep = acquire_day(
@@ -67,7 +76,7 @@ def acquire(day: str, windows: str, overwrite: bool = False, config: Config = No
         )
     except Exception as exc:
         _fail(exc)
-    rep["registered"] = register_day(s, d, parse_windows(d, windows))
+    rep["registered"] = register_day(s, d, parse_windows(d, windows), set_name)
     _print(rep)
 
 
@@ -117,7 +126,7 @@ def export(
     stop: str | None = None,
     out: Path | None = None,
     cross: bool = False,
-    day_variances: bool = True,
+    day_variances: bool = False,
     config: Config = None,
 ) -> None:
     """Export the corrected wind of DAY as a pycontrails-ready NetCDF (default window: the day's windows)."""

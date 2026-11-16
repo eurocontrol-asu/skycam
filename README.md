@@ -63,8 +63,9 @@ when the residual is zero (checked to the metre).
 
 Chosen on the six dev days only, before any holdout observation was read:
 - GP: Matern 3/2, flow-following, per-aircraft airspeed bias, hyperparameters of the all-dev-days fit (`GPConfig`
-  defaults: 43.4 km, 230 m, 72.6 min, field sd 1.77, bias N(-0.19, 0.78^2), noise 0.59 m/s); `run` / `export`
-  re-estimate the three variances on the day's own aircraft data. Criterion declared beforehand: pooled
+  defaults: 43.4 km, 230 m, 72.6 min, field sd 1.77, bias N(-0.19, 0.78^2), noise 0.59 m/s). The per-day
+  re-estimation of the three variances is an option (`export --day-variances`), off by default since milestone 3: it
+  did not help on the holdout days, and the frozen configuration evaluated there (`gp_frozen`) does not use it. Criterion declared beforehand: pooled
   leave-one-day-out skill of evaluation A (Matern+flow 0.530 vs Matern 0.510, better on 4 of 6 days). Evaluation B on the
   dev days does not separate the two (per-flight |drift|: flow better for 40 flights, worse for 47, Wilcoxon two-sided
   p = 0.29).
@@ -271,8 +272,8 @@ Retained hyperparameters (Matern 3/2, flow-following, all six days; shipped as `
 0.75-0.81, mean bias -0.19 to -0.21, noise 0.57-0.60: the values transfer between days. For the Gaussian kernel the
 transfer table (`eval-aircraft-2/transfer.csv`) gives per-day skill with the other days' values within a few
 hundredths of the skill with the day's own values. The per-day calibration is better when the three variances are
-re-estimated on the day's own aircraft data (z sd per day 0.93-1.08 instead of 0.78-1.19), so `export` / `run` do
-that by default (length scales unchanged).
+re-estimated on the day's own aircraft data (z sd per day 0.93-1.08 instead of 0.78-1.19), it is available as
+`export --day-variances` (off by default, see milestone 2).
 
 Diagnostics (Gaussian defaults, `20261113-diagnostics`): Hollingsworth-Lonnberg cross-aircraft covariances give a
 vertical scale of 195 m (marginal likelihood: 196 m), but a slow horizontal decay (3.9 at 5 km, 2.5 at 40 km, 1.5 at

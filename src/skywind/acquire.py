@@ -49,7 +49,7 @@ def _fetch_file(source: FileSource, day: str, dest: Path, overwrite: bool) -> st
 
 
 def register_day(
-    settings: Settings, day: str, windows: list[tuple[pd.Timestamp, pd.Timestamp]], set_name: str = "dev"
+    settings: Settings, day: str, windows: list[tuple[pd.Timestamp, pd.Timestamp]], set_name: str = "new"
 ) -> bool:
     """Append the day to ``days.csv`` (keeping its existing columns) unless already listed. True if a row was added."""
     path = settings.paths.days_csv()

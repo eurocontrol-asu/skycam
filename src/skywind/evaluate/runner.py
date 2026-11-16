@@ -381,7 +381,7 @@ def merge_contrail_runs(runs: Sequence[Path], out: Path) -> dict[str, pd.DataFra
     )
 
 
-def frozen_estimators(settings: Settings, day_variances: bool = True) -> Callable[[str], dict[str, ResidualEstimator]]:
+def frozen_estimators(settings: Settings, day_variances: bool = False) -> Callable[[str], dict[str, ResidualEstimator]]:
     """Per day, the frozen (shipped) estimators, nothing fitted on the evaluated day except, with ``day_variances``,
     the three variances re-estimated on its own aircraft data as ``skywind run`` does."""
     from skywind.pipeline import DAY_VARIANCES
