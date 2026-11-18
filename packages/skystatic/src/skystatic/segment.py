@@ -36,8 +36,10 @@ def edge_strength(
 
     The gradient is taken on the log image, after dividing by the median level in ``core``
     (the sky around the zenith), so it does not depend on exposure; ``floor`` bounds the
-    amplification of the darkest pixels, in units of that sky level. The largest value over
-    the colour channels is kept.
+    amplification of the darkest pixels, in units of that sky level (design choice: below a
+    tenth of the sky level a pixel is dark object whatever its exact value, and its sensor
+    noise must not make edges). ``sigma`` = 1 pixel smooths pixel and compression noise without
+    widening an edge beyond 2-3 pixels. The largest value over the colour channels is kept.
 
     The median gradient over a ``background`` x ``background`` window is then subtracted. An
     edge is a local excess: the steady brightening of the sky towards the horizon, strong on

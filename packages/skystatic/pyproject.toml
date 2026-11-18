@@ -97,5 +97,5 @@ python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["scipy.*"]
+module = ["scipy.*", "skycam.*"]  # skycam is an optional extra
 ignore_missing_imports = true

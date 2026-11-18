@@ -34,6 +34,15 @@ def run_command(
     ] = None,
     zenith_key: Annotated[str, cyclopts.Parameter(help="Array name inside a .npz")] = "zenith_deg",
     zenith_unit: Annotated[Literal["deg", "rad"], cyclopts.Parameter()] = "deg",
+    azimuth: Annotated[
+        Path | None,
+        cyclopts.Parameter(help=".npy/.npz azimuth map (degrees from north through east)"),
+    ] = None,
+    azimuth_key: Annotated[
+        str, cyclopts.Parameter(help="Array name inside the azimuth .npz")
+    ] = "azimuth_deg",
+    latitude: Annotated[float | None, cyclopts.Parameter(help="Site latitude, degrees")] = None,
+    longitude: Annotated[float | None, cyclopts.Parameter(help="Site longitude, degrees")] = None,
     pattern: Annotated[
         str | None, cyclopts.Parameter(help="File name pattern, e.g. '*_160.jpg'")
     ] = None,
@@ -47,6 +56,12 @@ def run_command(
     zenith_limit: Annotated[float, cyclopts.Parameter(help="Degrees")] = 90.0,
     edge: Annotated[float, cyclopts.Parameter(help="Edge strength threshold")] = 0.05,
     min_days: Annotated[float, cyclopts.Parameter(help="Fraction of reference days")] = 0.6,
+    ring_level: Annotated[
+        float, cyclopts.Parameter(help="Contrast down to which rings are masked; 0 = off")
+    ] = 0.0031,
+    ring_halfwidth: Annotated[
+        float, cyclopts.Parameter(help="Rings: +- pixels around bright lines; 0 = level mode")
+    ] = 1.5,
     jobs: Annotated[int, cyclopts.Parameter(help="Days processed at the same time")] = 1,
 ) -> None:
     """Compute the installation mask and the variable static of each day."""
@@ -58,9 +73,17 @@ def run_command(
             zenith_limit=zenith_limit,
             edge=edge,
             min_days=min_days,
+            ring_level=ring_level,
+            ring_halfwidth=ring_halfwidth,
             jobs=jobs,
         )
         geometry = SkyGeometry.from_file(zenith, zenith_key, zenith_unit)
+        if azimuth is not None:
+            if latitude is None or longitude is None:
+                raise ValueError("--azimuth needs --latitude and --longitude")
+            geometry = geometry.with_sun(
+                SkyGeometry.from_file(azimuth, azimuth_key).zenith_deg, latitude, longitude
+            )
         report = run(
             [open_source(day, pattern) for day in days],
             geometry,

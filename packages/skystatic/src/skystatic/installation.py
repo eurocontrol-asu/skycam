@@ -127,7 +127,10 @@ def freeze_installation(
         valid_from=valid_from,
         valid_until=valid_until,
         geometry_sha256=report.geometry_sha256,
-        parameters=report.config.model_dump(mode="json"),
+        parameters={
+            **report.config.model_dump(mode="json"),
+            "optics": None if report.optics is None else report.optics.model_dump(mode="json"),
+        },
         reference_days=report.reference_days,
         rejected_reference_days=report.rejected_reference_days,
         sha256="",

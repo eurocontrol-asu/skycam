@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,7 +18,17 @@ from skystatic import (
     run,
     sky_mask,
 )
-from tests_skystatic.conftest import DIRT, STRUCTURE, write_day, write_zip_day, zenith_map
+from tests_skystatic.conftest import (
+    DIRT,
+    STRUCTURE,
+    encode,
+    frame_names,
+    night_frame,
+    scene,
+    write_day,
+    write_zip_day,
+    zenith_map,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -106,7 +116,7 @@ def test_dirt_present_on_every_reference_day_needs_longer_reference(tmp_path: Pa
 def test_separate_reference_days_keep_dirt_variable(tmp_path: Path) -> None:
     dirty = days(tmp_path / "raw", dirty={1, 2, 3, 4, 5})
     clean = [
-        write_day(tmp_path / "ref" / f"2025-06-0{i}", datetime(2025, 6, i, 9)) for i in (1, 2, 3)
+        write_day(tmp_path / "ref" / f"2024-06-0{i}", datetime(2024, 6, i, 9)) for i in (1, 2, 3)
     ]
     run(
         [open_source(dirty[0])],
@@ -118,6 +128,36 @@ def test_separate_reference_days_keep_dirt_variable(tmp_path: Path) -> None:
     classes = np.asarray(Image.open(tmp_path / "out" / "classes_2024-01-01.png"))
     assert (classes[DIRT] == 2).all()
     assert (classes[STRUCTURE] == 1).all()
+
+
+def write_hours_day(folder: Path, day: datetime, dirty: bool) -> Path:
+    """A day of 12 hourly windows (frames every 30 min), so that every rule of the day runs."""
+    folder.mkdir(parents=True)
+    for index in range(24):
+        name = f"image_{day + timedelta(minutes=30 * index):%Y%m%d%H%M%S}.png"
+        (folder / name).write_bytes(encode(scene(index, dirty=dirty)))
+    return folder
+
+
+def test_a_day_has_the_same_mask_alone_or_in_a_batch(tmp_path: Path) -> None:
+    # A day's mask is a function of that day and of the reference days, not of its run.
+    raw = [
+        write_hours_day(tmp_path / "raw" / f"2024-01-0{i}", datetime(2024, 1, i, 6), dirty=i != 2)
+        for i in (1, 2, 3)
+    ]
+    refs = [
+        write_hours_day(tmp_path / "ref" / f"2024-06-0{i}", datetime(2024, 6, i, 6), dirty=False)
+        for i in (1, 2, 3)
+    ]
+    geometry = SkyGeometry.from_array(zenith_map())
+    reference = [open_source(f) for f in refs]
+    run([open_source(f) for f in raw], geometry, CONFIG, tmp_path / "batch", reference=reference)
+    run([open_source(raw[1])], geometry, CONFIG, tmp_path / "alone", reference=reference)
+    for name in ("classes_2024-01-02.png", "installation.png"):
+        alone = np.asarray(Image.open(tmp_path / "alone" / name))
+        assert np.array_equal(alone, np.asarray(Image.open(tmp_path / "batch" / name)))
+    dirty = np.asarray(Image.open(tmp_path / "batch" / "classes_2024-01-01.png"))
+    assert (dirty[DIRT] == 2).all()  # its neighbours hold a mark it has not
 
 
 def test_cache_is_reused_and_zip_gives_the_same_masks(tmp_path: Path) -> None:
@@ -148,14 +188,29 @@ def test_a_day_without_daylight_is_an_error(tmp_path: Path) -> None:
         run([open_source(folder)], SkyGeometry.from_array(zenith_map()), CONFIG, tmp_path / "out")
 
 
+def test_flat_night_frames_are_not_averaged(tmp_path: Path) -> None:
+    # The site camera writes a flat magenta frame at night, brighter than the daytime sky centre.
+    folder = tmp_path / "2024-01-01"
+    folder.mkdir()
+    names = frame_names(36, datetime(2024, 1, 1, 6))
+    for index, name in enumerate(names):
+        night = index < 6 or index >= 30
+        (folder / name).write_bytes(encode(night_frame() if night else scene(index)))
+    report = run(
+        [open_source(folder)], SkyGeometry.from_array(zenith_map()), CONFIG, tmp_path / "out"
+    )
+    assert (report.days[0].frames_daytime, report.days[0].frames_total) == (24, 36)
+    assert report.days[0].skyline_visible
+
+
 def test_a_foggy_reference_day_does_not_vote(tmp_path: Path) -> None:
     folders = days(tmp_path / "raw", dirty=set())
     fog = tmp_path / "raw" / "2024-01-09"
     fog.mkdir()
-    for i in range(24):  # uniform grey: no skyline, nothing static
-        Image.fromarray(np.full((96, 96, 3), 120, np.uint8)).save(
-            fog / f"image_202401090900{i:02d}.png"
-        )
+    grey = np.full((96, 96, 3), 120, np.uint8)
+    grey[zenith_map() >= 99] = 12  # the fisheye circle stays visible in fog
+    for i in range(24):  # uniform grey sky: no skyline, nothing static
+        Image.fromarray(grey).save(fog / f"image_202401090900{i:02d}.png")
     strict = CONFIG.model_copy(update={"min_days": 1.0})
     report = run(
         [open_source(folders[0])],
@@ -176,10 +231,10 @@ def test_a_foggy_processed_day_is_flagged(tmp_path: Path) -> None:
     folders = days(tmp_path / "raw", dirty=set())
     fog = tmp_path / "raw" / "2024-01-09"
     fog.mkdir()
+    grey = np.full((96, 96, 3), 120, np.uint8)
+    grey[zenith_map() >= 99] = 12  # the fisheye circle stays visible in fog
     for i in range(24):
-        Image.fromarray(np.full((96, 96, 3), 120, np.uint8)).save(
-            fog / f"image_202401090900{i:02d}.png"
-        )
+        Image.fromarray(grey).save(fog / f"image_202401090900{i:02d}.png")
     report = run(
         [open_source(fog), open_source(folders[0])],
         SkyGeometry.from_array(zenith_map()),
@@ -194,3 +249,17 @@ def test_a_foggy_processed_day_is_flagged(tmp_path: Path) -> None:
     assert not product.metadata.variable_reliable
     with pytest.raises(ValueError, match="unreliable daily mask"):
         sky_mask(tmp_path / "out", datetime(2024, 1, 9, 12), (96, 96))
+
+
+def test_references_from_another_period_are_refused(tmp_path: Path) -> None:
+    # A dirt spot lasting a year on later references would mask open sky on earlier days.
+    day = write_day(tmp_path / "2024-01-01", datetime(2024, 1, 1, 9), count=6)
+    later = write_day(tmp_path / "2025-06-01", datetime(2025, 6, 1, 9), count=6)
+    with pytest.raises(ValueError, match="reference_window"):
+        run(
+            [open_source(day)],
+            SkyGeometry.from_array(zenith_map()),
+            CONFIG,
+            tmp_path / "out",
+            reference=[open_source(later)],
+        )

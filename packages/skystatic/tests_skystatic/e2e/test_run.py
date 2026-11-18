@@ -104,7 +104,7 @@ def test_reference_takes_several_days_and_they_are_not_processed(
     tmp_path: Path, zenith_file: Path
 ) -> None:
     day = write_day(tmp_path / "2024-01-01", datetime(2024, 1, 1, 9), dirty=True)
-    references = [write_day(tmp_path / f"2025-06-0{i}", datetime(2025, 6, i, 9)) for i in (1, 2, 3)]
+    references = [write_day(tmp_path / f"2024-06-0{i}", datetime(2024, 6, i, 9)) for i in (1, 2, 3)]
     result = skystatic(
         "run",
         str(day),
@@ -120,5 +120,5 @@ def test_reference_takes_several_days_and_they_are_not_processed(
     assert result.returncode == 0, result.stderr
     report = json.loads((tmp_path / "out" / "report.json").read_text())
     assert [d["label"] for d in report["days"]] == ["2024-01-01"]
-    assert report["reference_days"] == ["2025-06-01", "2025-06-02", "2025-06-03"]
+    assert report["reference_days"] == ["2024-06-01", "2024-06-02", "2024-06-03"]
     assert report["days"][0]["variable_components"] == 1

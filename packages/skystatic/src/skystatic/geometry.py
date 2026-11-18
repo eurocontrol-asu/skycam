@@ -21,9 +21,26 @@ __all__ = ["SkyGeometry"]
 
 @dataclass(frozen=True)
 class SkyGeometry:
-    """Zenith angle in degrees per pixel; pixels without a direction hold ``inf``."""
+    """Zenith angle in degrees per pixel; pixels without a direction hold ``inf``.
+
+    Optional, to keep what the sun leaves out of the marks: the azimuth of every pixel (degrees
+    from north through east) and the camera site (latitude, longitude). See :meth:`with_sun`.
+    """
 
     zenith_deg: NDArray[np.float32]
+    azimuth_deg: NDArray[np.float32] | None = None
+    site: tuple[float, float] | None = None
+
+    def with_sun(
+        self, azimuth_deg: NDArray[np.floating], latitude: float, longitude: float
+    ) -> SkyGeometry:
+        """The same geometry with the pixel azimuths and the site, so the sun can be placed."""
+        azimuth = np.asarray(azimuth_deg, dtype=np.float32)
+        if azimuth.shape != self.zenith_deg.shape:
+            raise ValueError("Azimuth and zenith maps must have the same shape")
+        if not (-90 <= latitude <= 90 and -180 <= longitude <= 360):
+            raise ValueError("Site latitude/longitude out of range")
+        return SkyGeometry(self.zenith_deg, azimuth, (float(latitude), float(longitude)))
 
     @classmethod
     def from_array(
@@ -82,7 +99,8 @@ class SkyGeometry:
             )
         y = np.minimum(((np.arange(height) + 0.5) * rows / height).astype(int), rows - 1)
         x = np.minimum(((np.arange(width) + 0.5) * cols / width).astype(int), cols - 1)
-        return SkyGeometry(self.zenith_deg[np.ix_(y, x)])
+        azimuth = None if self.azimuth_deg is None else self.azimuth_deg[np.ix_(y, x)]
+        return SkyGeometry(self.zenith_deg[np.ix_(y, x)], azimuth, self.site)
 
     def below(self, limit_deg: float) -> NDArray[np.bool_]:
         """Pixels looking closer to the zenith than ``limit_deg``."""

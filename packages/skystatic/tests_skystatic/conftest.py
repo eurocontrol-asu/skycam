@@ -33,10 +33,16 @@ def scene(index: int, dirty: bool = False, night: bool = False) -> NDArray[np.ui
     image[STRUCTURE] = 25
     if dirty:
         image[DIRT] = 90
+    image[zenith_map() >= 99] = 12  # past the horizon a fisheye sees its dark housing
     if night:
         image = image * 0.02
     rgb = np.stack([image * 0.9, image * 0.95, image], axis=-1)
     return np.clip(rgb, 0, 255).astype(np.uint8)
+
+
+def night_frame() -> NDArray[np.uint8]:
+    """What the GVCCS site camera writes at night: one flat magenta value, brighter than the day."""
+    return np.broadcast_to(np.array([96, 51, 84], np.uint8), (SIZE, SIZE, 3)).copy()
 
 
 def frame_names(count: int, day: datetime) -> list[str]:
