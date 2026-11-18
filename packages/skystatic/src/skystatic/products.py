@@ -11,9 +11,101 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-__all__ = ["DayMask", "MaskMetadata", "load_day_mask", "sky_mask"]
+from skystatic.optics import RingFit, ring_mask
+
+__all__ = [
+    "DayMask",
+    "MaskMetadata",
+    "OpticsRings",
+    "RingCircle",
+    "load_day_mask",
+    "load_optics",
+    "sky_mask",
+]
+
+
+class RingCircle(BaseModel):
+    """One ring of the optics: its own centre and radius, pixels of the product's image size."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    centre: tuple[float, float]  # x, y
+    radius: float
+    width: float = 0.0  # outer minus inner radius; 0 for a thin line (lines mode)
+    contrast: float  # peak contrast on the mean of the reference days, log units
+
+
+class OpticsRings(BaseModel):
+    """The ring circles fitted by skystatic, with the image size their pixels refer to.
+
+    Written as ``optics.json`` next to the masks and stored in a frozen installation; read with
+    :func:`load_optics`. ``halfwidth`` is the half-width (pixels) of the band masked about each
+    thin line; ``fit.eye`` the radius of the central bright disc (0 if none).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[1] = 1
+    size_wh: tuple[int, int]
+    halfwidth: float = Field(ge=0)
+    fit: RingFit
+
+    @property
+    def circles(self) -> list[RingCircle]:
+        """Every ring as a circle about its own centre."""
+        out = []
+        for (inner, outer, peak), (centre, _) in zip(
+            self.fit.rings, self.fit.circles(), strict=True
+        ):
+            out.append(
+                RingCircle(
+                    centre=centre, radius=(inner + outer) / 2, width=outer - inner, contrast=peak
+                )
+            )
+        return out
+
+    def scaled(self, size: tuple[int, int]) -> OpticsRings:
+        """The same circles for an image of ``size`` (width, height) and the same view."""
+        width, height = size
+        sx, sy = width / self.size_wh[0], height / self.size_wh[1]
+        if abs(sx - sy) > 0.01 * sx:
+            raise ValueError("The optics and the requested image have different aspect ratios")
+
+        def point(p: tuple[float, float]) -> tuple[float, float]:
+            return ((p[0] + 0.5) * sx - 0.5, (p[1] + 0.5) * sy - 0.5)
+
+        fit = self.fit
+        scaled = RingFit(
+            centre=point(fit.centre),
+            noise=fit.noise,
+            rings=[(a * sx, b * sx, c) for a, b, c in fit.rings],
+            eye=fit.eye * sx,
+            centres=[point(c) for c in fit.centres],
+        )
+        return OpticsRings(size_wh=(width, height), halfwidth=self.halfwidth * sx, fit=scaled)
+
+    def band(self) -> NDArray[np.bool_]:
+        """The ring bands and the eye as masked by skystatic, at ``size_wh``."""
+        return ring_mask(self.fit, (self.size_wh[1], self.size_wh[0]), self.halfwidth)
+
+
+def load_optics(path: Path, size: tuple[int, int] | None = None) -> OpticsRings | None:
+    """The ring circles of a skystatic run folder (``optics.json``), of an ``optics.json``
+    file, or of a frozen installation NPZ (checksum verified); None when no ring was fitted.
+    ``size`` (width, height): scale them to that image size."""
+    if path.is_dir():
+        path = path / "optics.json"
+    if path.suffix == ".npz":
+        from skystatic.installation import FrozenInstallation  # avoids a cycle at import
+
+        product = FrozenInstallation.from_file(path).optics
+    else:
+        product = OpticsRings.model_validate_json(path.read_text())
+    if product is None or size is None:
+        return product
+    return product.scaled(size)
 
 
 class MaskMetadata(BaseModel):

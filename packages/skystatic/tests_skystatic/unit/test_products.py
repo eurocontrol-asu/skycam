@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from skystatic import MaskMetadata, load_day_mask, sky_mask
+from skystatic import MaskMetadata, OpticsRings, RingFit, load_day_mask, sky_mask
 from skystatic.products import png_metadata
 
 
@@ -98,3 +98,40 @@ def test_unknown_classes_are_refused(tmp_path: Path) -> None:
     Image.fromarray(np.full((2, 2), 255, np.uint8)).save(path, pnginfo=png_metadata(metadata))
     with pytest.raises(ValueError, match="unknown class"):
         load_day_mask(path)
+
+
+OPTICS_FIT = RingFit(
+    centre=(10.0, 8.0),
+    noise=1e-4,
+    rings=[(5.0, 5.0, 0.003), (7.0, 7.0, 0.004)],
+    eye=1.0,
+    centres=[(10.0, 8.0), (11.0, 8.0)],
+)
+
+
+def test_circles_follow_each_rings_own_centre() -> None:
+    optics = OpticsRings(size_wh=(20, 16), halfwidth=0.6, fit=OPTICS_FIT)
+    assert [(c.centre, c.radius, c.contrast) for c in optics.circles] == [
+        ((10.0, 8.0), 5.0, 0.003),
+        ((11.0, 8.0), 7.0, 0.004),
+    ]
+
+
+def test_scaling_keeps_pixel_centres_and_radii_in_proportion() -> None:
+    scaled = OpticsRings(size_wh=(20, 16), halfwidth=0.6, fit=OPTICS_FIT).scaled((40, 32))
+    assert scaled.size_wh == (40, 32)
+    assert scaled.halfwidth == pytest.approx(1.2)
+    assert scaled.circles[1].centre == (22.5, 16.5)
+    assert scaled.circles[1].radius == 14.0
+    with pytest.raises(ValueError, match="aspect"):
+        OpticsRings(size_wh=(20, 16), halfwidth=0.6, fit=OPTICS_FIT).scaled((40, 40))
+
+
+def test_band_marks_the_circles_and_the_eye_only() -> None:
+    band = OpticsRings(size_wh=(20, 16), halfwidth=0.6, fit=OPTICS_FIT).band()
+    assert band.shape == (16, 20)
+    assert band[8, 10]  # the eye
+    assert band[8, 15] and band[8, 18]  # on each circle, right of its own centre
+    assert not band[8, 13]  # between the eye and the first circle
+    assert not band[0, 0]
+    assert not band[1, 1]  # far from every circle

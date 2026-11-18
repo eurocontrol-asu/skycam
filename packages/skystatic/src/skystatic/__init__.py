@@ -5,8 +5,17 @@ from __future__ import annotations
 from skystatic.frames import DirectorySource, Frame, FrameSource, ZipSource, open_source
 from skystatic.geometry import SkyGeometry
 from skystatic.installation import FrozenInstallation, freeze_installation
+from skystatic.optics import RingFit
 from skystatic.pipeline import DayResult, RunReport, StaticConfig, compute_day, run
-from skystatic.products import DayMask, MaskMetadata, load_day_mask, sky_mask
+from skystatic.products import (
+    DayMask,
+    MaskMetadata,
+    OpticsRings,
+    RingCircle,
+    load_day_mask,
+    load_optics,
+    sky_mask,
+)
 
 __all__ = [
     "DayMask",
@@ -16,6 +25,9 @@ __all__ = [
     "FrameSource",
     "FrozenInstallation",
     "MaskMetadata",
+    "OpticsRings",
+    "RingCircle",
+    "RingFit",
     "RunReport",
     "SkyGeometry",
     "StaticConfig",
@@ -23,6 +35,7 @@ __all__ = [
     "compute_day",
     "freeze_installation",
     "load_day_mask",
+    "load_optics",
     "open_source",
     "run",
     "sky_mask",

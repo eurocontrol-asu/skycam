@@ -62,6 +62,13 @@ def run_command(
     ring_halfwidth: Annotated[
         float, cyclopts.Parameter(help="Rings: +- pixels around bright lines; 0 = level mode")
     ] = 1.5,
+    ring_class: Annotated[
+        Literal["sky", "installation"],
+        cyclopts.Parameter(
+            help="Class written on the ring bands: sky (default; circles in optics.json) or "
+            "installation (behaviour before 2026-11-18)"
+        ),
+    ] = "sky",
     jobs: Annotated[int, cyclopts.Parameter(help="Days processed at the same time")] = 1,
 ) -> None:
     """Compute the installation mask and the variable static of each day."""
@@ -75,6 +82,7 @@ def run_command(
             min_days=min_days,
             ring_level=ring_level,
             ring_halfwidth=ring_halfwidth,
+            ring_class=ring_class,
             jobs=jobs,
         )
         geometry = SkyGeometry.from_file(zenith, zenith_key, zenith_unit)

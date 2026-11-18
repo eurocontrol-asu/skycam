@@ -6,8 +6,9 @@ noise of a single pixel of a day's average. They are found where that noise aver
 mean local contrast of the reference days, averaged around circles. The common centre is the
 point that makes that radial profile sharpest. The reflections are not exactly concentric: each
 bright ring is a circle with its own centre (within a few pixels of the common one) and radius,
-the circle along which the mean contrast peaks (``ring_circles``). The result belongs to the
-installation: it does not change from day to day.
+the circle along which the mean contrast peaks (``ring_circles``). The circles do not change
+from day to day; the light along them is the sun's (reflected in the optics), so the masks write
+them as sky by default and describe them in ``optics.json`` (``StaticConfig.ring_class``).
 """
 
 from __future__ import annotations

@@ -42,7 +42,7 @@ No trained model. Inputs: the frames of several days and the zenith angle of eve
    found left out, a least-squares circle through those maxima) and kept when a third of the
    sectors show it. A line of the common radial profile (maximum above twice its noise, sign in
    more than half of 8 sectors) that cannot be measured on its own keeps the common centre. Every
-   ring is masked +-1.5 px about its own centre as installation, every day; two rings whose
+   ring is masked +-1.5 px about its own centre, every day; two rings whose
    bands come closer than the masking width (3 px) anywhere are one band, from the inner edge of
    the inner one to the outer edge of the outer one (no sliver of sky lit by both). There is no ring
    "of the day": measured on each review day, every reference circle holds its ring (the
@@ -51,6 +51,17 @@ No trained model. Inputs: the frames of several days and the zenith angle of eve
    ring (its width plus 4 px) the ring's own light is removed first (median of each arc of
    radius and azimuth sector about the ring's own centre), so that a mark crossing a ring is
    measured up to the line and nothing is removed elsewhere.
+   **The rings are sun light, not a fixed object** (decision of the camera's owner,
+   2026-11-18): by default (`ring_class = "sky"`) their bands and the eye are written as sky
+   (class 0) and the circles are written to `optics.json` for the next library of the chain
+   (`skysun` predicts their light frame by frame). Inside, nothing changes: the bands still keep
+   ring light out of the faint marks, still carry the 2 px slack of the variable static and still
+   connect the sky across them, exactly as when they were class 1. A band pixel lying inside a
+   piece of variable static (dirt crossing a ring: class 2 on both sides of the band, closed over
+   the width of the widest band) takes class 2 instead of leaving a line of sky inside the dirt.
+   `ring_class = "installation"` (`--ring-class installation`) restores the behaviour before
+   2026-11-18 (the bands in class 1). `--ring-level 0` still switches the rings off entirely,
+   fit and exclusion included.
 6. **Faint bright marks by hysteresis (two thresholds and connectivity).** Dust, drops and a
    water trail of 0.5-1.5 % are under 3 noise units in most single hours, but they stay put. The
    day's mean and the means of its three parts (consecutive groups of at least three hours) are
@@ -80,8 +91,9 @@ No trained model. Inputs: the frames of several days and the zenith angle of eve
 So a pixel enters class 2 by one of: the edge test (step 3), the hourly marks (step 4, minus the
 skyline glow), a faint
 bright mark (step 6: a stand-alone mark over the whole day or over two sun-free parts, or a weak
-pixel attached to a bright mark), or enclosure (step 8). The rings of the optics (step 5) are
-part of the installation (class 1) on every day.
+pixel attached to a bright mark), enclosure (step 8), or a ring band inside such a piece (step 5).
+The rings of the optics (step 5) are sky (class 0) by default and installation (class 1) with
+`ring_class = "installation"`.
 
 ### Parameters and their origin
 
@@ -124,6 +136,8 @@ part of the installation (class 1) on every day.
 | ring line level | 2 x profile noise | the profile's own noise (robust standard deviation over radii); the eye: the central disc while its mean profile stays above that level |
 | enclosed sky | none | sky not connected to the open sky is not sky (one rule, no threshold) |
 | `ring_level` | 0.31 % (level mode) | user's choice of depth: 0.31 % ~ 4 % of the sky, 0.23 % ~ 12 % |
+| `ring_class` | `sky` | decision of the camera's owner (2026-11-18): the rings are sun light reflected in the optics; `installation` keeps the earlier class 1 |
+| ring band inside variable static | closing over the widest band + 1 px | geometric: a band crossed by a dirt piece is bridged across its width only, never along the ring |
 | ring sectors | sign in > 4 of 8 sectors | a ring is a circle; a spot on one radius is not |
 | `min_days` | 0.6 | design choice: a clear majority of >= 10 reference days |
 | `reference_window` | 365 days | design choice: one seasonal cycle; references describe the period of the days they serve |
@@ -167,6 +181,7 @@ Written to `--output`:
 | `reference_votes.png` | number of reference days on which each pixel is static |
 | `classes_<day>.png` | same, plus 2 = variable static of that day |
 | `overlay_<day>.jpg` | averaged image of the day with the classes drawn, for inspection |
+| `optics.json` | the ring circles (own centre, radius, contrast), the eye and the band half-width, in pixels of the working size (`size_wh`); read with `load_optics` |
 | `report.json` | parameters, frames used, fractions and component counts per day |
 
 From Python:
@@ -217,6 +232,22 @@ that every faint spot has been found. The class pixels themselves are unchanged.
 Legacy PNGs without metadata are refused and must be regenerated in a fresh
 output directory. Previously overwritten products cannot be recovered by this fix.
 
+## Consume the ring circles
+
+```python
+from pathlib import Path
+from skystatic import load_optics
+
+optics = load_optics(Path("masks"), size=(2464, 2056))  # a run folder, optics.json or a frozen NPZ
+for circle in optics.circles:  # own centre (x, y) and radius, pixels of the requested size
+    print(circle.centre, circle.radius, circle.contrast)
+band = optics.band()  # the bands and the eye exactly as skystatic masks them
+```
+
+`load_optics` returns `None` when no ring was fitted. A frozen installation carries the same
+circles (`FrozenInstallation.optics`), verified by its checksum. Scaling maps pixel centres
+((x + 0.5) * s - 0.5) and multiplies radii, the eye and the band half-width by the same factor.
+
 ## Freeze and reuse an installation
 
 Choose and review reference days for one camera, then freeze that run explicitly:
@@ -266,9 +297,19 @@ are kept for history; the GVCCS numbers are superseded.
 2026-11-17 (this method), GVCCS site camera, twelve review days (2023-09-27 .. 2024-03-18),
 ten reference days of 2024-03 .. 2024-10 (after a cleaning that ended a Sep 2023 - Feb 2024
 dirt episode, before a dirt spot that appeared in 2024-11), azimuth map and site given:
-installation 16.8 % of the domain, of which 3.8 % are the seven rings of the optics; static per
+installation 16.8 % of the domain, of which 3.8 % were the seven rings of the optics (class 1
+until 2026-11-18); static per
 day 11.3-13.9 %, variable static 0.02-5.0 % per day (blue-sky days carry a field of drops: 3.7-5.0 %). Every
 day has a visible skyline. The Eye2Sky cameras were not re-run.
+
+2026-11-18 (rings as sky, `ring_class = "sky"`), the six development days of skysun
+(2023-09-27, 2023-10-21, 2023-11-01, 2024-01-15, 2024-03-18, 2024-05-10), the same ten
+reference days and parameters as the 2026-11-17 run: with `--ring-class installation` the masks
+of the five days of that run are bit-identical to it. With the default, on every day class 1 is
+exactly the earlier class 1 minus the 20 408 band pixels (16.83 % -> 13.03 % of the domain;
+the bands and the eye are 3.81 %), and nothing else changes except class 2: 0 to 434 band pixels
+per day become class 2 (dirt crossing a ring; +0.000 to +0.081 % of the domain: 44, 0, 41, 44, 0
+and 434 px), the rest of the bands becomes sky.
 
 ## Limits
 
@@ -286,7 +327,8 @@ day has a visible skyline. The Eye2Sky cameras were not re-run.
   passes the vote on too few reference days is sky on some days and variable static on
   others.
 - **Reflections of the sun inside the optics** move during the day and are averaged out; they
-  are not handled here. Dust lit only while the sun passes nearby (a few hours) is left as sky:
+  are not handled here (the fixed ring circles they light are described in `optics.json`; the
+  library `skysun` predicts their light per frame). Dust lit only while the sun passes nearby (a few hours) is left as sky:
   it is static only for part of the day, and a daily mask cannot say when.
 - Short-exposure cameras (Eye2Sky) need `--pattern` to select the daytime exposure.
 

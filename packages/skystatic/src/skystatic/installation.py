@@ -16,7 +16,8 @@ from numpy.typing import NDArray
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
-from skystatic.products import read_classes
+from skystatic.optics import RingFit
+from skystatic.products import OpticsRings, read_classes
 
 __all__ = ["FrozenInstallation", "freeze_installation"]
 
@@ -92,6 +93,24 @@ class FrozenInstallation:
         classes.flags.writeable = False
         votes.flags.writeable = False
         return cls(metadata, classes, votes)
+
+    @property
+    def ring_fit(self) -> RingFit | None:
+        """The ring circles fitted on the reference days (pixels of ``classes``), if any."""
+        stored = self.metadata.parameters.get("optics")
+        return None if stored is None else RingFit.model_validate(stored)
+
+    @property
+    def optics(self) -> OpticsRings | None:
+        """The ring circles as the typed product of :func:`skystatic.load_optics`."""
+        fit = self.ring_fit
+        if fit is None:
+            return None
+        rows, cols = self.classes.shape
+        halfwidth = self.metadata.parameters.get("ring_halfwidth", 1.5)
+        if not isinstance(halfwidth, int | float):
+            raise ValueError("Invalid ring_halfwidth in the frozen installation")
+        return OpticsRings(size_wh=(cols, rows), halfwidth=float(halfwidth) * cols / 1232, fit=fit)
 
 
 def freeze_installation(

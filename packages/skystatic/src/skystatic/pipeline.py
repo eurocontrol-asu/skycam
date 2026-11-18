@@ -16,7 +16,13 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
-from scipy.ndimage import binary_dilation, find_objects, label
+from scipy.ndimage import (
+    binary_closing,
+    binary_dilation,
+    distance_transform_edt,
+    find_objects,
+    label,
+)
 
 from skystatic.aggregate import Aggregates, aggregate_parts, daytime_frames, frame_size
 from skystatic.contrast import (
@@ -41,7 +47,7 @@ from skystatic.masks import (
     variable_mask,
 )
 from skystatic.optics import RingFit, concentric_rings, ring_mask, without_rings
-from skystatic.products import MaskMetadata, png_metadata
+from skystatic.products import MaskMetadata, OpticsRings, png_metadata
 from skystatic.render import overlay
 from skystatic.segment import static_mask_all_parts
 from skystatic.sun import sun_clearance
@@ -205,6 +211,15 @@ class StaticConfig(BaseModel):
         "+- this many pixels of their radius (the measured width of a line, ~3 px); 0 selects "
         "the level mode",
     )
+    ring_class: Literal["sky", "installation"] = Field(
+        "sky",
+        description="Class written for the ring bands (and the eye) of the optics. 'sky' "
+        "(default, decision of the camera's owner, 2026-11-18): the rings are sun light "
+        "reflected inside the optics, not a fixed object; they are class 0 in the masks and "
+        "described as circles in optics.json (skysun predicts their light). 'installation': "
+        "class 1, the behaviour before that date. Either way the circles are fitted, reported "
+        "and kept out of the faint marks and the variable static exactly as before",
+    )
     sun_clearance: float = Field(
         20.0,
         ge=0,
@@ -308,6 +323,8 @@ class RunReport(BaseModel):
     reference_days: list[str]
     rejected_reference_days: list[str]
     installation_fraction: float
+    # Share of the domain under the ring bands and the eye (class 0 or 1 by ``ring_class``)
+    ring_fraction: float = 0.0
     classes: dict[int, str]
     days: list[DayReport]
     optics: RingFit | None = None
@@ -614,7 +631,16 @@ def _check_installation(
         raise ValueError("Frozen installation checksum mismatch")
     if metadata.geometry_sha256 != _geometry_fingerprint(geometry):
         raise ValueError("Frozen installation has a different camera geometry")
-    ignored = {"workers", "jobs", "min_days", "outlier_ratio", "tolerance", "reference_window"}
+    # ring_class changes only the class written on the ring bands, never the frozen pixels used
+    ignored = {
+        "workers",
+        "jobs",
+        "min_days",
+        "outlier_ratio",
+        "tolerance",
+        "reference_window",
+        "ring_class",
+    }
     parameters = config.model_dump(mode="json")
     mismatched = [
         key
@@ -727,6 +753,56 @@ def day_classes(
     return enclosed_sky(class_map(domain, fixed, variable), core, rings)
 
 
+def _halfwidth(config: StaticConfig, width: int) -> float:
+    """Half-width of a ring line at the working width (``ring_halfwidth`` is given at 1232)."""
+    return config.ring_halfwidth * width / 1232
+
+
+def _frozen_parts(
+    installation: FrozenInstallation, config: StaticConfig
+) -> tuple[NDArray[np.bool_], NDArray[np.bool_], RingFit | None, NDArray[np.bool_]]:
+    """(fixed with the ring bands, ring bands, fit, domain) of a frozen installation.
+
+    The ring bands are drawn again from the stored fit and added to class 1, so that a frozen
+    installation written with the rings as sky (``ring_class='sky'``) and one written with them
+    as installation give the same rules downstream.
+    """
+    shape = installation.classes.shape
+    optics = installation.ring_fit
+    domain = np.asarray(installation.classes != 3)
+    rings = (
+        np.zeros(shape, dtype=bool)
+        if optics is None
+        else ring_mask(optics, shape, _halfwidth(config, shape[1])) & domain
+    )
+    return np.asarray((installation.classes == 1) | rings), rings, optics, domain
+
+
+def _publish_rings(
+    classes: NDArray[np.uint8], rings: NDArray[np.bool_], config: StaticConfig
+) -> None:
+    """In place: with ``ring_class='sky'`` the ring bands that were class 1 become sky (0).
+
+    Only class-1 pixels of the bands change: class 1 written = class 1 used inside minus the
+    ring bands. A band pixel inside a piece of variable static (dirt crossing a ring: class 2
+    on both sides of the band, within a closing as wide as the widest band) takes class 2
+    instead of leaving a line of sky inside the piece; nothing else changes class 2.
+    """
+    if config.ring_class != "sky":
+        return
+    freed = (classes == 1) & rings
+    variable = classes == 2
+    if variable.any() and freed.any():
+        reach = int(np.ceil(float(distance_transform_edt(rings).max()))) + 1
+        disc = np.hypot(*np.mgrid[-reach : reach + 1, -reach : reach + 1]) <= reach
+        bridged = binary_closing(np.pad(variable, reach), structure=disc)[
+            reach:-reach, reach:-reach
+        ]
+        classes[freed & bridged] = 2
+        freed &= ~bridged
+    classes[freed] = 0
+
+
 def run(
     days: Sequence[FrameSource],
     geometry: SkyGeometry,
@@ -770,19 +846,7 @@ def run(
         reference_days = [r.label for r in voters]
         rejected_days = [r.label for r in rejected]
     else:
-        stored = installation.metadata.parameters.get("optics")
-        optics = None if stored is None else RingFit.model_validate(stored)
-        rings = (
-            np.zeros(installation.classes.shape, dtype=bool)
-            if optics is None
-            else ring_mask(
-                optics,
-                installation.classes.shape,
-                config.ring_halfwidth * installation.classes.shape[1] / 1232,
-            )
-        )
-        fixed = installation.classes == 1
-        domain = installation.classes != 3
+        fixed, rings, optics, domain = _frozen_parts(installation, config)
         votes = installation.votes
         reference_days = installation.metadata.reference_days
         rejected_days = installation.metadata.rejected_reference_days
@@ -793,8 +857,17 @@ def run(
     core = geometry.resized((width, height)).below(config.core_zenith)
     if installation is None:  # a frozen installation is used as frozen
         fixed = enclosed_sky(class_map(domain, fixed), core, rings) == 1
-    Image.fromarray(class_map(domain, fixed)).save(output / "installation.png")
+    # ``fixed`` keeps the ring bands inside every rule below (slack of the variable static,
+    # skyline glow, visibility), as before; only the written classes depend on ring_class.
+    published = class_map(domain, fixed)
+    _publish_rings(published, rings, config)
+    Image.fromarray(published).save(output / "installation.png")
     Image.fromarray(votes).save(output / "reference_votes.png")
+    if optics is not None:
+        product = OpticsRings(
+            size_wh=(width, height), halfwidth=_halfwidth(config, width), fit=optics
+        )
+        (output / "optics.json").write_text(product.model_dump_json(indent=2) + "\n")
     tolerance = _scaled_tolerance(config, width)
     zenith = geometry.resized((width, height)).zenith_deg
     reports = []
@@ -802,6 +875,7 @@ def run(
         result = results[source.label]
         day_mask = _day_static(result, fixed, rings, optics, zenith, config)
         classes = day_classes(day_mask, fixed, domain, core, rings, tolerance)
+        _publish_rings(classes, rings, config)
         variable = classes == 2
         visible = bool(
             fixed.any() and (result.mask & fixed).sum() >= config.outlier_ratio * fixed.sum()
@@ -840,7 +914,8 @@ def run(
         size_wh=(width, height),
         reference_days=reference_days,
         rejected_reference_days=rejected_days,
-        installation_fraction=float(fixed.sum() / max(int(domain.sum()), 1)),
+        installation_fraction=float((published == 1).sum() / max(int(domain.sum()), 1)),
+        ring_fraction=float((rings & domain).sum() / max(int(domain.sum()), 1)),
         classes=CLASS_NAMES,
         days=reports,
         optics=optics,
