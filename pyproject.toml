@@ -1,9 +1,9 @@
 [project]
 name = "skyobs-workspace"
 version = "0.0.0"
-description = "Ground-based sky observation: fisheye geometry, static sky masks and wind reconstruction"
+description = "Ground-based sky observation: fisheye geometry, static sky masks, cloud maps and wind reconstruction"
 requires-python = ">=3.12"
-dependencies = ["skycam", "skystatic", "skywind"]
+dependencies = ["skycam", "skycloud", "skystatic", "skywind"]
 
 [tool.uv]
 package = false
@@ -13,16 +13,19 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 skycam = { workspace = true }
+skycloud = { workspace = true }
 skystatic = { workspace = true }
 skywind = { workspace = true }
 
 [dependency-groups]
 dev = [
     { include-group = "skycam-dev" },
+    { include-group = "skycloud-dev" },
     { include-group = "skystatic-dev" },
     { include-group = "skywind-dev" },
 ]
 skycam-dev = [{ include-group = "quality" }, "pytest-asyncio>=0.24", "pytest-benchmark>=4.0"]
+skycloud-dev = [{ include-group = "quality" }, "scipy-stubs>=1.14"]
 skystatic-dev = [{ include-group = "quality" }, "scipy-stubs>=1.14"]
 skywind-dev = [{ include-group = "quality" }, "pandas-stubs", "scipy-stubs"]
 quality = [
@@ -34,6 +37,7 @@ docs = ["mkdocs-material>=9.0", "mkdocstrings[python]>=0.27"]
 [tool.pytest.ini_options]
 testpaths = [
     "packages/skycam/tests",
+    "packages/skycloud/tests_skycloud",
     "packages/skystatic/tests_skystatic",
     "packages/skywind/tests_skywind",
 ]
@@ -60,7 +64,7 @@ strict = true
 
 [tool.coverage.run]
 branch = true
-source = ["skycam", "skystatic", "skywind"]
+source = ["skycam", "skycloud", "skystatic", "skywind"]
 
 [tool.coverage.xml]
 output = "coverage.xml"
