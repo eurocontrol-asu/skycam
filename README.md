@@ -1,15 +1,16 @@
 # skyobs
 
-A uv workspace for ground-based sky observation, with four independent Python packages.
+A uv workspace for ground-based sky observation, with five independent Python packages.
 
 | Package | Purpose | Documentation |
 |---|---|---|
 | [skycam](packages/skycam/) | Calibrated fisheye geometry, image projection and dense sampling maps | [Online documentation](https://eurocontrol-asu.github.io/skycam/) |
 | [skycloud](packages/skycloud/) | Continuous cloud map: value, confidence and an unknown state per sky pixel | [Method, inputs, products and limits](packages/skycloud/README.md) |
 | [skystatic](packages/skystatic/) | Installation and daily static masks from averaged all-sky images | [Method, usage and limitations](packages/skystatic/README.md) |
+| [skysun](packages/skysun/) | Where and how much the sun disturbs each frame: its glow and the reflections of the optics, a value in [0, 1] per pixel | [Method, products, calibration and limits](packages/skysun/README.md) |
 | [skywind](packages/skywind/) | Mode S observations, ERA5 wind correction and contrail advection | [Method, configuration and frozen evaluations](packages/skywind/README.md) |
 
-All four packages require **Python 3.12+**. Development uses **Python 3.14**;
+All five packages require **Python 3.12+**. Development uses **Python 3.14**;
 CI tests all members on Python 3.12, 3.13 and 3.14. Python 3.15 remains
 unverified, including the availability of stable dependency wheels.
 The virtual root project is named `skyobs-workspace`; it is not published.
@@ -25,18 +26,19 @@ make lint
 uv build --package skycam
 uv build --package skycloud
 uv build --package skystatic
+uv build --package skysun
 uv build --package skywind
 uv run --group docs mkdocs serve -f packages/skycam/mkdocs.yml
 ```
 
-`uv sync` installs all four members and the common development tools. Use
+`uv sync` installs all five members and the common development tools. Use
 `uv sync --all-packages --all-groups --all-extras` for all tooling and extras.
 There is one `uv.lock`. Each member keeps its own ruff, mypy and pytest
 configuration. Root pytest uses importlib and collects all configured test
-roots; skycloud uses `tests_skycloud/`, skystatic uses `tests_skystatic/` and skywind uses `tests_skywind/`
+roots; skycloud uses `tests_skycloud/`, skystatic uses `tests_skystatic/`, skysun uses `tests_skysun/` and skywind uses `tests_skywind/`
 to avoid collisions with skycam's existing `tests/` package. CI discovers members from `[tool.uv.workspace]`.
 
-The source packages keep their public import names: `skycam`, `skycloud`, `skystatic` and `skywind`.
+The source packages keep their public import names: `skycam`, `skycloud`, `skystatic`, `skysun` and `skywind`.
 Skystatic identifies days from image timestamps and provides `sky_mask(...)`
 for exact-date, size-aware consumption, with quality metadata inside each PNG.
 Its installation can be frozen and reused per camera and validity period; see
@@ -44,6 +46,8 @@ Its installation can be frozen and reused per camera and validity period; see
 Installing `skystatic` alone does not install skycam. Install
 `skystatic[skycam]` to use `SkyGeometry.from_skycam(calibration)`; see the
 [example](packages/skystatic/README.md#skycam-calibration-optional).
+Skysun depends on skystatic (sky pixels and ring circles, `skystatic.load_optics`), never on
+skycloud; its reflection table for the GVCCS site camera is embedded and checksummed.
 
 ## Skywind configuration and tests
 

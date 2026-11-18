@@ -25,6 +25,7 @@ members = [
     "skycloud",
     "skyobs-workspace",
     "skystatic",
+    "skysun",
     "skywind",
 ]
 
@@ -3020,6 +3021,7 @@ dependencies = [
     { name = "skycam" },
     { name = "skycloud" },
     { name = "skystatic" },
+    { name = "skysun" },
     { name = "skywind" },
 ]
 
@@ -3081,6 +3083,16 @@ skystatic-dev = [
     { name = "ruff" },
     { name = "scipy-stubs" },
 ]
+skysun-dev = [
+    { name = "mypy" },
+    { name = "pip-audit" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-mock" },
+    { name = "ruff" },
+    { name = "scipy-stubs" },
+]
 skywind-dev = [
     { name = "mypy" },
     { name = "pandas-stubs" },
@@ -3098,6 +3110,7 @@ requires-dist = [
     { name = "skycam", editable = "packages/skycam" },
     { name = "skycloud", editable = "packages/skycloud" },
     { name = "skystatic", editable = "packages/skystatic" },
+    { name = "skysun", editable = "packages/skysun" },
     { name = "skywind", editable = "packages/skywind" },
 ]
 
@@ -3160,6 +3173,16 @@ skystatic-dev = [
     { name = "ruff", specifier = ">=0.8" },
     { name = "scipy-stubs", specifier = ">=1.14" },
 ]
+skysun-dev = [
+    { name = "mypy", specifier = ">=2.4.1" },
+    { name = "pip-audit", specifier = ">=2.0" },
+    { name = "pre-commit", specifier = ">=4.0" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "pytest-mock", specifier = ">=3.14" },
+    { name = "ruff", specifier = ">=0.8" },
+    { name = "scipy-stubs", specifier = ">=1.14" },
+]
 skywind-dev = [
     { name = "mypy", specifier = ">=2.4.1" },
     { name = "pandas-stubs" },
@@ -3208,6 +3231,48 @@ requires-dist = [
     { name = "skycam", marker = "extra == 'skycam'", editable = "packages/skycam" },
 ]
 provides-extras = ["skycam"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.13" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "pytest-mock", specifier = ">=3.14" },
+    { name = "ruff", specifier = ">=0.8" },
+    { name = "scipy-stubs", specifier = ">=1.14" },
+]
+
+[[package]]
+name = "skysun"
+source = { editable = "packages/skysun" }
+dependencies = [
+    { name = "cyclopts" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "pydantic" },
+    { name = "scipy" },
+    { name = "skystatic" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-mock" },
+    { name = "ruff" },
+    { name = "scipy-stubs" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cyclopts", specifier = ">=4.5" },
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "pillow", specifier = ">=10.4" },
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "scipy", specifier = ">=1.13" },
+    { name = "skystatic", editable = "packages/skystatic" },
+]
 
 [package.metadata.requires-dev]
 dev = [
