@@ -20,6 +20,7 @@ dependencies = [
     # the same distribution of cv2 as skycam (two cv2 distributions cannot share a venv)
     "opencv-python>=4.9",
     "skystatic",
+    "skysun",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +29,7 @@ skycam = ["skycam"]
 [tool.uv.sources]
 skycam = { workspace = true }
 skystatic = { workspace = true }
+skysun = { workspace = true }
 
 [project.urls]
 Homepage = "https://github.com/eurocontrol-asu/skycam/tree/main/packages/skycloud"

@@ -5,14 +5,19 @@ Continuous cloud map of a fixed all-sky (fisheye) camera. For every sky pixel of
 - a **value** in [0, 1]: 0 clear sky, 1 thick cloud, graded in between (no classes, no threshold
   baked in: the user chooses one);
 - a **confidence** in [0, 1]: how well clear sky and cloud can be told apart there and then;
-- an explicit **unknown** state: no value where the final confidence is below 0.30.
+- an **unknown** verdict where the final confidence is below 0.30 — a complementary mask (`_unknown/`), which by default does NOT remove the value (`--unknown mask` restores the c16 behaviour: no value there);
+- an **always-predicted** value (`_unmasked/`): the value before the unknown rule, with a value
+  on every sky pixel (no value only where there is no sky: the installation and outside the
+  field of view).
 
 No trained model. The method compares each pixel with reference tables of what clear sky and
 overcast look like at that place and time, measured once on an archive of the camera's frames.
 This version (c16) is a faithful port of the research prototype `clouds_v3` (16 correction
 rounds), for the GVCCS site camera at Brétigny-sur-Orge; its reference tables are embedded.
-The package sits after `skycam` (geometry) and `skystatic` (static masks) in the chain; the sun's
-influence is isolated in `skycloud.sun`, the seam where the future `skysun` library will plug in.
+The package sits after `skycam` (geometry), `skystatic` (static masks) and `skysun` (the sun's
+zone and reflections) in the chain. Each library keeps to one job: near the sun and on the
+day's dirt marks the cloud map gives a value, and `skysun`'s zone layer and `skystatic`'s class 2
+say how far to trust it.
 
 ## Method in plain terms
 
@@ -38,9 +43,10 @@ influence is isolated in `skycloud.sun`, the seam where the future `skysun` libr
    overcast-shaped sky has its colour opacity lifted towards 1, when the colour agrees.
 6. **Low-information fill.** Where no cue decides, the value leans on the more informative sky
    around it, and the confidence is low.
-7. **Confidence** = D / (D + 6) × the sun-artefact confidence × the agreement of the cues with
-   the value, D being how separable clear sky and cloud are there. Near the sun the artefact cut
-   is narrowed on homogeneous skies.
+7. **Confidence** = D / (D + 6) × the agreement of the cues with the value, D being how
+   separable clear sky and cloud are there; beyond 30° of the sun also × the labelling kit's
+   sun-artefact confidence (diffraction star, halo). Within 30° of the sun the confidence says
+   nothing about the sun (see "Near the sun").
 8. **Low sun.** Below +6.5° the diffuse sky is decided by a *knowability* K from the tables
    alone, smooth in space and time; cloud **structures** (sharp lines, mid-scale blobs, contour-
    bounded bodies) that persist in a ±30 s neighbour are certified and delivered inside an
@@ -53,6 +59,55 @@ influence is isolated in `skycloud.sun`, the seam where the future `skysun` libr
 A frame's result depends on its neighbours in time (level smoothing, ledger, consistency, the
 unknown decision): rendering a frame inside a different list can change it slightly.
 
+## Near the sun and under the day's dirt (`--unseen fill`, the default)
+
+One rule for the whole map: no value only where there is no sky (skystatic class 1, the
+installation; outside the field of view); a value everywhere else.
+
+- **The aureole is valued as measured**, with no cut: the same value the map computed before,
+  pixel for pixel. It is biased by construction (the sun's glare changes the sky's colour and
+  brightness, and the tables have no archive support within 18-20° of the sun). Measured as the
+  always-predicted value minus that of the sky 30-40° from the sun: on clear skies it reads
+  **cloudier** (2024-01-15 11:00: +0.14 at 3-5°, +0.08 at 5-10°, +0.03 at 10-15°, +0.02 at
+  15-20°, 0.00 at 20-30°; 2024-05-10 11:40: +0.12 at 3-5°, within ±0.02 beyond 5°); **under a veil
+  it reads clearer**, strongly (2024-03-18 15:40: -0.63 at 3-5°, -0.45 at 5-10°, -0.14 at
+  10-15°; 2023-09-27 13:00: -0.36 at 3-10°). Around the sun's core the measured value also
+  carries a thin bright ring (0.35 against 0.15 at 3-6 px beyond the core on 2024-01-15 11:00):
+  the neighbourhood filters see the excluded core.
+- **The sun's saturated core** (skysun's definition, shared: saturated pixels connected to a
+  saturated pixel within 3° of the computed sun, its disc, glare and star spikes), the 4-px
+  margin the kit drew around it and any other saturated pixel within 30° of the sun are not
+  measured (the white of the sensor would read as thick cloud). Each 8-connected hole takes the
+  **median value and median confidence of the measured ring just outside it**: 0.3° wide (3 px),
+  1° and then 3° when the thinner ring holds fewer than 20 measured pixels (a ring partly
+  behind the skyline uses its measured part; a hole with no measured pixel within 3° keeps no
+  value).
+- **The variable static of the day** (skystatic class 2: drops, dirt on the dome) is filled by
+  the same function, from the same kind of ring. Its pixels are never read as sky upstream:
+  the cues, the level fit, the certification and every statistic still see only class 0; only
+  the final value (and its confidence) is filled. One constant per mark, the median of its
+  measured rim. Measured by hiding known sky under discs: on a clear sky the fill is within
+  0.02 of the hidden value (p90) up to a 200-px radius; on broken cloud (2023-09-27 13:00) the
+  median error is 0.01 at a 3-px radius, 0.02 at 12 px (p90 0.05), 0.04 at 25 px (p90 0.15),
+  0.07-0.09 at 50-100 px. **The fill is a faithful estimate for marks up to about 450 px (a
+  12-px radius, 1.3°)**; a large piece (a dense drop field, the water trail, a mark along the
+  skyline) gets one flat value, the median of its measured rim, which hides any cloud
+  structure under it: read it with class 2. On the masks checked the largest mark is 2,408 px.
+- **The confidence near the sun** (within 30°) no longer contains the sun-artefact term: it says
+  how well clear sky and cloud separate, not whether the sun spoils the pixel. **Read the value
+  near the sun with skysun's zone layer**, and under the dirt with skystatic's class 2. A filled
+  pixel carries the confidence of its source ring.
+- A low confidence does not remove the value either: the unknown rule (low sun, veils, the low
+  separation of clear sky and cloud in the glare) writes its verdict to the complementary mask
+  `_unknown/` and leaves the delivered value as predicted. `--unknown mask`
+  (`CloudMapParams(unknown_state="mask")`) restores version c16: 255 in the value there.
+- `--unseen legacy` (`CloudMapParams(unseen_sky="legacy")`) is version c16 as frozen: no value on
+  the sun's core (dilated 4 px), on saturated pixels and on class 2, the kit's sun-artefact term
+  everywhere and the c13/c15 aureole rule. It reproduces the golden c16 products byte for byte.
+- skysun's sun position and this package's (the kit's NOAA code) differ by up to 6e-14° (not to
+  the last bit): the engine keeps its own everywhere, so that `legacy` stays bit-identical;
+  skysun's position defines only the sun's area and core.
+
 ## Inputs
 
 | Input | What |
@@ -60,7 +115,7 @@ unknown decision): rendering a frame inside a different list can change it sligh
 | frames | `ROOT/YYYY/MM/DD/image_<YYYYmmddHHMMSS>.jp2` (8-bit JPEG content; UTC timestamps) |
 | geometry | azimuth and zenith maps (degrees, NaN outside the sky) as `.npy` or arrays of a `.npz` (`--azimuth`, `--zenith`); or `CameraGeometry.from_skycam(calibration)` with the `skycam` extra |
 | site | latitude and longitude of the camera (sun position, NOAA ephemeris) |
-| static masks | the skystatic daily products (`classes_<day>.png`, read through `skystatic.sky_mask`; class 0 is sky). A day without a mask is an error, never a fallback. Days whose skyline was not visible need `--allow-unreliable-mask` |
+| static masks | the skystatic daily products (`classes_<day>.png`, read through `skystatic.sky_mask`; class 0 is measured sky, class 2 is filled, class 1 has no value). A day without a mask is an error, never a fallback. Days whose skyline was not visible need `--allow-unreliable-mask` |
 | reference tables | embedded for the GVCCS camera (`gvccs_bretigny_c16.npz`, SHA-256 checked at load); another camera's archive with `--tables` / `ReferenceTables.load(path, sha256=...)` |
 | ledger cache | a folder; missing days are built on the first render (`skycloud ledger` builds them explicitly) |
 
@@ -68,7 +123,8 @@ unknown decision): rendering a frame inside a different list can change it sligh
 
 | File | Encoding |
 |---|---|
-| `<ts>.png` | value, uint8: value = code / 254 (0 clear .. 254 thick cloud); **255 = unknown** (or not sky) |
+| `<ts>.png` | value, uint8: value = code / 254 (0 clear .. 254 thick cloud); 255 = not sky (with `--unknown mask` also: unknown) |
+| `_unknown/<ts>.png` | 255 = final confidence under the contract (the unknown verdict); a complementary mask, written with the default `--unknown layer` |
 | `<ts>_conf.png` | published confidence, code / 255 |
 | `<ts>_lens.png` | 255 = lens ghost found by the detector; the value there is left as measured |
 | `_unmasked/<ts>.png` | the value before the unknown rule (255 only where there is no value at all) |
@@ -84,7 +140,7 @@ unknown decision): rendering a frame inside a different list can change it sligh
 uv run skycloud render --list frames.txt --out out/ \
     --images /data/raw --mask-dir /data/skystatic/masks --ledger-dir /data/skycloud/ledgers \
     --azimuth geometry.npz --zenith geometry.npz --latitude 48.600518 --longitude 2.346795 \
-    [--allow-unreliable-mask] [--exclude hidden.txt] [--workers 2]
+    [--allow-unreliable-mask] [--exclude hidden.txt] [--workers 2] [--unseen fill|legacy]
 uv run skycloud ledger 20240115 20240116 --images ... --ledger-dir ... --azimuth ... --zenith ... \
     --latitude ... --longitude ...
 ```

@@ -2,7 +2,8 @@
 
 | File | Content |
 |---|---|
-| ``<ts>.png`` | value, uint8: value = code / 254 (0 clear .. 254 thick cloud); 255 = unknown |
+| ``<ts>.png`` | value, uint8: code / 254 (0 clear .. 254 thick cloud); 255 = not sky (*) |
+| ``_unknown/<ts>.png`` | 255 = the unknown verdict (final confidence under the contract) |
 | ``<ts>_conf.png`` | published confidence, code / 255 |
 | ``<ts>_lens.png`` | 255 = lens ghost found by the detector (the value there is left as measured) |
 | ``_unmasked/<ts>.png`` | the value before the unknown rule (255: no value at all) |
@@ -13,6 +14,10 @@
 | ``_capped/``, ``_uncapped/`` | the confidence after / before the consistency cap |
 | ``_neighbours/`` | the +-30 s neighbours rendered for the temporal passes |
 | ``states.json``, ``frames.json`` | frame states (levels) and per-frame diagnostics |
+
+(*) with ``unknown_state="layer"`` (default) a low confidence never removes the value: the
+verdict is the complementary mask ``_unknown/``. With ``"mask"`` (version c16) the verdict is
+written into the value as 255 and ``_unknown/`` is not written.
 """
 
 from __future__ import annotations

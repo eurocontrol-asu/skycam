@@ -12,6 +12,7 @@ from numpy.typing import NDArray
 
 from skycloud.geometry import CameraGeometry, Site
 from skycloud.ledger_build import build_ledgers
+from skycloud.params import CloudMapParams
 from skycloud.reference_build import (
     BuildInputs,
     BuildParams,
@@ -44,6 +45,8 @@ def _setup(
     exclude: Path | None,
     allow_unreliable_mask: bool,
     workers: int,
+    unseen: Literal["fill", "legacy"] = "fill",
+    unknown: Literal["layer", "mask"] = "layer",
 ) -> RenderSetup:
     geometry = CameraGeometry.from_files(
         azimuth, zenith, azimuth_key=azimuth_key, zenith_key=zenith_key, unit=unit
@@ -58,6 +61,7 @@ def _setup(
         exclude=frozenset(exclude.read_text().split()) if exclude else frozenset(),
         allow_unreliable_mask=allow_unreliable_mask,
         workers=workers,
+        params=CloudMapParams(unseen_sky=unseen, unknown_state=unknown),
     )
 
 
@@ -92,6 +96,20 @@ def render_command(
         bool, cyclopts.Parameter(help="Accept days whose skyline was not visible")
     ] = False,
     workers: Annotated[int, cyclopts.Parameter(help="Worker processes (about 3.5 GB each)")] = 1,
+    unseen: Annotated[
+        Literal["fill", "legacy"],
+        cyclopts.Parameter(
+            help="Where the sensor does not see the sky (sun core, variable static): fill "
+            "(a value from the measured sky around it) or legacy (c16: no value there)"
+        ),
+    ] = "fill",
+    unknown: Annotated[
+        Literal["layer", "mask"],
+        cyclopts.Parameter(
+            help="Where the confidence is under the contract: layer (the value stays, the "
+            "verdict goes to _unknown/) or mask (c16: no value there)"
+        ),
+    ] = "layer",
 ) -> None:
     """Render frames with their temporal context into OUT."""
     try:
@@ -100,7 +118,8 @@ def render_command(
             images=images, mask_dir=mask_dir, ledger_dir=ledger_dir, azimuth=azimuth, zenith=zenith,
             latitude=latitude, longitude=longitude, azimuth_key=azimuth_key, zenith_key=zenith_key,
             unit=unit, tables=tables, tables_sha256=tables_sha256, exclude=exclude,
-            allow_unreliable_mask=allow_unreliable_mask, workers=workers,
+            allow_unreliable_mask=allow_unreliable_mask, workers=workers, unseen=unseen,
+            unknown=unknown,
         )  # fmt: skip
         report = render(targets, setup, out)
     except (ValueError, KeyError, OSError) as exc:

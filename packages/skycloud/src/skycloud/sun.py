@@ -11,7 +11,18 @@ ephemeris position, dilated) and ``sun_artefacts.confidence`` (confidence v2: th
 star, the halo weighted by the sun's visibility, a halo floor). Only what the cloud map reads is
 kept: the halo, spike and ghost labels of ``sun_mask.detect`` never reached it. The constants
 are the kit's defaults. ``aureole_confidence`` is the cloud map's own (rounds c13 and c15):
-where the kit's artefact cut around the sun may be narrowed.
+where the kit's artefact cut around the sun may be narrowed. All of that is the ``legacy`` sun
+handling (version c16, kept bit-identical).
+
+The default handling (``unseen_sky='fill'``) gives a value everywhere within ``sun_area_deg`` of the
+sun: ``sun_area`` reads, through ``skysun`` (the one definition shared by both libraries), the
+angle of every pixel to the sun and the sun's saturated pixels (saturated pixels connected to a
+saturated pixel within 3 deg of the computed sun: its disc, glare and star spikes);
+``skycloud.fill.fill_holes`` gives every sky pixel without a measured value near the sun the
+median value of the measured ring just outside its hole. skysun's sun position and
+skycloud's ``sun_position`` (the kit's) differ by up to 6e-14 deg (not to the last bit), so
+the engine keeps the kit's position everywhere (``legacy`` must stay bit-identical) and
+skysun's position defines only the sun area and core.
 """
 
 from __future__ import annotations
@@ -29,10 +40,12 @@ from skycloud.geometry import CameraGeometry, angle_to_sun, to_vectors
 
 __all__ = [
     "SAT",
+    "SunArea",
     "SunCore",
     "artefact_confidence",
     "aureole_confidence",
     "detect_core",
+    "sun_area",
     "sun_position",
 ]
 
@@ -419,3 +432,27 @@ def aureole_confidence(
             kconf_c = np.maximum(a.kconf, np.clip((gp - r_new) / 2.0, 0.0, 1.0)).astype(np.float32)
             info = {"kit_cut": cut, "sat_r": rs, "new_cut": r_new}
     return kconf_c, info
+
+
+@dataclass(frozen=True)
+class SunArea:
+    """The sun as skysun defines it on one frame: the angle (deg, float32) of every pixel to the
+    sun and the sun's saturated pixels (bool)."""
+
+    angle: F32
+    core: B
+
+
+def sun_area(
+    img: U8, when: datetime, latitude_deg: float, longitude_deg: float, geometry: CameraGeometry
+) -> SunArea:
+    """skysun's angle to the sun and saturated core of a frame (``when``: UTC, aware)."""
+    from skysun import Site as SunSite
+    from skysun.params import ZoneParams
+    from skysun.sun import sun_position as skysun_position
+    from skysun.zone import sun_saturation
+
+    sgeo = geometry.skysun
+    sun = skysun_position(when, SunSite(latitude_deg=latitude_deg, longitude_deg=longitude_deg))
+    angle = sgeo.angle_to(sun)
+    return SunArea(angle, sun_saturation(img, angle, sgeo.inside, ZoneParams()))

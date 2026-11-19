@@ -2973,6 +2973,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "scipy" },
     { name = "skystatic" },
+    { name = "skysun" },
 ]
 
 [package.optional-dependencies]
@@ -3000,6 +3001,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.13" },
     { name = "skycam", marker = "extra == 'skycam'", editable = "packages/skycam" },
     { name = "skystatic", editable = "packages/skystatic" },
+    { name = "skysun", editable = "packages/skysun" },
 ]
 provides-extras = ["skycam"]
 

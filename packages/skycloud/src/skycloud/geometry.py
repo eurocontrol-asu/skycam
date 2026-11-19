@@ -154,6 +154,14 @@ class CameraGeometry:
         return to_vectors(az, zen).astype(np.float32)
 
     @cached_property
+    def skysun(self) -> Any:
+        """The same maps as a ``skysun.CameraGeometry`` (float32): the geometry the sun's
+        angle and saturated core are defined on (shared with skysun)."""
+        from skysun import CameraGeometry as SunGeometry
+
+        return SunGeometry(self.azimuth_deg, self.zenith_deg)
+
+    @cached_property
     def centre(self) -> F64:
         """The optical centre (x, y): the pixel of smallest zenith angle."""
         iy, ix = np.unravel_index(np.nanargmin(self.zenith_deg), self.zenith_deg.shape)

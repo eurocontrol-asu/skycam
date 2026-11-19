@@ -1,7 +1,9 @@
 """The explicit "unknown" state (method stage "unknown state", rounds c6-c16).
 
 A pixel whose final confidence is below 0.30 gets NO VALUE (code 255) in ``<ts>.png``; the
-full value is kept in ``_unmasked/``. The published confidence is read with the +-30 s
+full value is kept in ``_unmasked/``.
+With ``unknown_state="layer"`` (default) the delivered value is not blanked: the rule's
+verdict goes to ``_unknown/`` instead. The published confidence is read with the +-30 s
 neighbours on unchanged sky (median of the three frames before the cap; a capped pixel keeps
 its cap). In daytime (no ``_known/`` layer) the boundary is the confidence smoothed at the fill
 kernel's scale, upsampled bilinearly, plus the strict per-pixel contract. Below E_K the
@@ -597,7 +599,13 @@ def _apply_one(out: Path, ts: str, ff: FrameFactors, ctx: UnknownContext) -> flo
         unk = _low_sun(f, c_reg, ff, ctx)
     else:
         unk = _daytime(f, ff, ctx)
-    Image.fromarray(np.where(unk, 255, v).astype(np.uint8)).save(vp)
+    if ctx.p.unknown_state == "mask":
+        Image.fromarray(np.where(unk, 255, v).astype(np.uint8)).save(vp)
+    else:  # the value stays; the rule's verdict is a complementary layer
+        Image.fromarray(v).save(vp)
+        side = out / "_unknown" / f"{ts}.png"
+        side.parent.mkdir(exist_ok=True)
+        Image.fromarray(np.where(unk, 255, 0).astype(np.uint8)).save(side)
     return round(float(unk.sum() / max(has.sum(), 1)), 4)
 
 

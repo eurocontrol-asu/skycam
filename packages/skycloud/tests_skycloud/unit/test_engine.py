@@ -7,7 +7,7 @@ from skycloud.params import CloudMapParams
 from skycloud.tables import ReferenceTables
 from tests_skycloud.unit.test_geometry import fisheye
 
-P = CloudMapParams()
+P = CloudMapParams(unseen_sky="legacy", unknown_state="mask")
 
 
 def _inputs(geo_shape: tuple[int, int], szen: float) -> FrameInputs:

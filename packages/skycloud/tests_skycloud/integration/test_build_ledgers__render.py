@@ -20,6 +20,7 @@ from PIL import Image
 
 from skycloud import CameraGeometry, RenderSetup, Site, build_ledgers, render
 from skycloud.ledger import DayLedger, LedgerSet
+from skycloud.params import CloudMapParams
 
 pytestmark = pytest.mark.integration
 
@@ -51,6 +52,9 @@ def _setup(m: dict[str, Any], ledgers: Path) -> RenderSetup:
         exclude=frozenset(m["exclude"]),
         allow_unreliable_mask=m["allow_unreliable_mask"],
         workers=int(os.environ.get("SKYCLOUD_TEST_WORKERS", "1")),
+        params=CloudMapParams(
+            unseen_sky="legacy", unknown_state="mask"
+        ),  # the golden c16 products: legacy sun handling
     )
 
 

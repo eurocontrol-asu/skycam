@@ -8,7 +8,7 @@ Changing a value changes the method: the defaults ARE version c16.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +23,43 @@ class CloudMapParams(BaseModel):
     """Parameters of the cloud map, version c16 (defaults)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # --- where the sensor does not see the sky (2026-11-18, owner's decision; criteria in
+    # skycloud-sun/criteria.md and its Addendum 1) -------------------------------------------
+    unseen_sky: Literal["fill", "legacy"] = _p(
+        "fill",
+        "fill (default): no value only where there is no sky (installation, class 1; outside the "
+        "domain); a value everywhere else. The aureole is valued as measured, with no cut; the "
+        "sun's saturated core (skysun's definition), the other unmeasured pixels within "
+        "sun_area_deg of the sun and the variable static of the day (class 2) take the value of "
+        "the measured ring just outside them (fill_holes, after every measurement: spoilt pixels "
+        "are never read upstream); no sun-artefact term in the confidence within sun_area_deg "
+        "(read skysun's zone layer and skystatic's class 2 there). legacy: version c16 as frozen "
+        "(no value on the sun core, saturated pixels and class 2; the kit's sun-artefact "
+        "confidence and the c13/c15 aureole rule)",
+    )
+    unknown_state: Literal["layer", "mask"] = _p(
+        "layer",
+        "layer (default; owner's decision of 2026-11-19: a low confidence must not remove the "
+        "value): the delivered value is the always-predicted one, everywhere there is sky; what "
+        "the unknown rule would have blanked is written as a side mask (_unknown/<ts>.png, 255 = "
+        "the final confidence is under the contract), to be combined by whoever reads the map. "
+        "mask: version c16 as frozen (the unknown rule writes 255 into the delivered value)",
+    )
+    sun_area_deg: float = _p(
+        30.0,
+        "deg: the area around the sun where unseen_sky=fill fills holes and drops the sun term "
+        "(criterion P3's bound)",
+    )
+    fill_ring_deg: tuple[float, ...] = _p(
+        (0.3, 1.0, 3.0),
+        "deg: widths of the measured ring a hole is filled from, tried in order: 0.3 deg (3 px "
+        "on the GVCCS camera: the sky just around the hole; around the sun's core the measured "
+        "value 3-9 px beyond the hole carries a bright filter ring, 0.35 against 0.15 on "
+        "2024-01-15 11:00), then 1 and 3 deg when the thinner ring holds too few measured "
+        "pixels (behind the skyline, inside a drop field)",
+    )
+    fill_ring_min_px: int = _p(20, "measured pixels a ring needs before its median is used")
 
     # --- frame level: the clear-sky level of the frame and its smoothing in time ---------
     s_n: float = _p(

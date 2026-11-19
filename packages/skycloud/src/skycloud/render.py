@@ -30,7 +30,8 @@ from typing import Any
 import cv2
 import numpy as np
 from numpy.typing import NDArray
-from skystatic import sky_mask
+from skystatic import load_day_mask, sky_mask
+from skystatic.products import read_metadata
 
 from skycloud.consistency import SkyChange, apply_cap
 from skycloud.engine import FrameInputs, FrameResult, render_frame
@@ -41,7 +42,7 @@ from skycloud.ledger_build import ensure_ledgers
 from skycloud.level import Grid, context_frames, frame_state, smooth_states
 from skycloud.params import CloudMapParams
 from skycloud.products import write_frame
-from skycloud.sun import sun_position
+from skycloud.sun import sun_area, sun_position
 from skycloud.tables import ReferenceTables
 from skycloud.unknown import FrameFactors, UnknownContext, apply_unknown
 
@@ -97,6 +98,7 @@ class _Worker:
             setup.ledger_dir, sky8(setup.geometry.zen99), setup.params.t_smooth, setup.params.e_day
         )
         self._masks: dict[str, B] = {}
+        self._spoilt: dict[str, B] = {}
         self._grids: dict[str, Grid] = {}
 
     def mask(self, ts: str) -> B:
@@ -109,6 +111,22 @@ class _Worker:
                 self.s.mask_dir, when, (w, h), allow_unreliable=self.s.allow_unreliable_mask
             )
         return self._masks[day]
+
+    def spoilt(self, ts: str) -> B:
+        """The day's variable static (skystatic class 2) at the frame size: sky behind it, the
+        measurement spoilt (read from the same daily product as ``mask``)."""
+        day = ts[:8]
+        if day not in self._spoilt:
+            h, w = self.s.geometry.shape
+            when = datetime.strptime(ts, "%Y%m%d%H%M%S").date()
+            paths = [
+                q
+                for q in sorted(self.s.mask_dir.glob("classes_*.png"))
+                if read_metadata(q).day == when
+            ]
+            classes = load_day_mask(paths[0], (w, h)).classes  # sky_mask checked it is unique
+            self._spoilt[day] = np.asarray(classes == 2)
+        return self._spoilt[day]
 
     def grid(self, ts: str) -> Grid:
         day = ts[:8]
@@ -172,9 +190,17 @@ class _Worker:
             img = self.s.image(ts)
             saz, szen = self.s.sun(ts)
             off, note = self.offset_full(ts, 90.0 - szen)
+            site = self.s.site
+            area = (
+                sun_area(img, when_of(ts), site.latitude_deg, site.longitude_deg, self.s.geometry)
+                if self.s.params.unseen_sky == "fill"
+                else None
+            )
+            fill = self.s.params.unseen_sky == "fill"
             x = FrameInputs(
                 saz, szen, self.mask(ts), level, off, note,
-                {s: self.neighbour_loader(ts, s) for s in (-30, 30)},
+                {s: self.neighbour_loader(ts, s) for s in (-30, 30)}, area,
+                self.spoilt(ts) if fill else None,
             )  # fmt: skip
             res: FrameResult = render_frame(
                 img, ts, x, self.s.geometry, self.s.tables, self.s.params

@@ -35,6 +35,7 @@ from skycloud.cues import (
     ped_g,
     texture,
 )
+from skycloud.fill import fill_holes
 from skycloud.geometry import CameraGeometry, angle_to_sun
 from skycloud.images import pedestal
 from skycloud.lens import lens_flags
@@ -47,7 +48,13 @@ from skycloud.structure import (
     mid_neighbours,
     shape_clear,
 )
-from skycloud.sun import AureoleInput, artefact_confidence, aureole_confidence, detect_core
+from skycloud.sun import (
+    AureoleInput,
+    SunArea,
+    artefact_confidence,
+    aureole_confidence,
+    detect_core,
+)
 from skycloud.tables import ReferenceTables
 
 __all__ = ["FrameInputs", "FrameResult", "render_frame"]
@@ -62,7 +69,9 @@ BANDS = ((0, 40), (40, 60), (60, 70), (70, 80), (80, 85))
 class FrameInputs:
     """What one frame's render reads besides the image: its sun position, its static sky
     mask, its smoothed level, the gain-ledger offset of its colour index (full resolution;
-    None: not corrected) with its note, and loaders of its +-30 s neighbour images."""
+    None: not corrected) with its note, loaders of its +-30 s neighbour images, and
+    (``unseen_sky='fill'``) skysun's angle to the sun and saturated core, and the variable
+    static of the day (skystatic class 2), filled at the end, never measured."""
 
     saz: float
     szen: float
@@ -71,6 +80,8 @@ class FrameInputs:
     offset: F32 | None
     offset_note: str
     neighbours: dict[int, Callable[[], U8 | None]]
+    sun_area: SunArea | None = None
+    spoilt: B | None = None
 
 
 @dataclass
@@ -139,7 +150,7 @@ class _Engine:
         kconf = artefact_confidence(f.img, sun, geo.inside, sky)
         sat = f.img.max(-1) >= self.p.sat
         valid = sky & ~core & ~sat
-        f.set(sun=sun, kconf=kconf, sat=sat, valid=valid)
+        f.set(sun=sun, kconf=kconf, sat=sat, valid=valid, sky=sky)
 
     # ------------------------------------------------------------------ stage: cues
     def smoothed_cues(self, f: _F, x: FrameInputs) -> None:
@@ -595,6 +606,19 @@ def _finalise(f: _F, eng: _Engine, alpha: Any, conf: Any) -> tuple[F32, F32]:
     valid, info = f.valid, f.info
     alpha[~valid] = np.nan
     conf = np.where(valid, conf, 0.0).astype(np.float32)
+    p = eng.p
+    if p.unseen_sky == "fill":
+        # where the sensor does not see the sky (the sun's core and the other unmeasured
+        # pixels near the sun; the variable static of the day): the measured ring's value
+        area = f.area
+        near = f.sky & ~valid & (area.angle < p.sun_area_deg)
+        spoilt = f.spoilt & eng.geo.inside
+        widths = tuple(max(round(d * eng.geo.px_deg), 1) for d in p.fill_ring_deg)
+        info["fill"] = {
+            **fill_holes(alpha, conf, valid, near | spoilt, widths, p.fill_ring_min_px, area.core),
+            "core_px": int((area.core & f.sky).sum()),
+            "spoilt_px": int(spoilt.sum()),
+        }
     info.update(
         r=float(np.median(f.reff[valid])) if valid.any() else None,
         sigma_g=round(f.sig, 2),
@@ -662,6 +686,10 @@ def _confidence(
         )
         if aur is not None:
             f.info["aureole"] = aur
+    if p.unseen_sky == "fill":
+        # the sun-artefact term no longer lowers the confidence near the sun: there the
+        # confidence says nothing about the sun (read skysun's zone layer)
+        kconf_c = np.where(f.area.angle < p.sun_area_deg, np.float32(1.0), kconf_c)
     disc = disc * f.dratio
     conf = disc / (disc + p.fill_eps) * kconf_c
     agree, agree_nol = eng.agreement(f, alpha, w_meas)
@@ -727,6 +755,11 @@ def render_frame(
             np.full((h, wd), np.nan, np.float32), np.zeros((h, wd), np.float32), info
         )
     f = _F(img, elev, x.saz, x.szen, info)
+    if p.unseen_sky == "fill":
+        if x.sun_area is None:
+            raise ValueError("sun handling fill needs FrameInputs.sun_area (skycloud.sun.sun_area)")
+        f.set(area=x.sun_area)
+        f.set(spoilt=np.zeros(x.sky_mask.shape, bool) if x.spoilt is None else x.spoilt)
     eng.layers(f, x.sky_mask)
     eng.smoothed_cues(f, x)
     eng.references(f, level)
