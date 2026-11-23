@@ -1,8 +1,8 @@
 site_name: skycam
 site_description: Camera-agnostic fisheye image projection library for ground-based sky observation
-site_url: https://eurocontrol-asu.github.io/skycam
-repo_url: https://github.com/eurocontrol-asu/skycam
-repo_name: eurocontrol-asu/skycam
+site_url: https://eurocontrol-asu.github.io/skyobs
+repo_url: https://github.com/eurocontrol-asu/skyobs
+repo_name: eurocontrol-asu/skyobs
 copyright: Copyright &copy; 2026 Gabriel Jarry
 
 theme:

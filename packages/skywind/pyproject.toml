@@ -33,10 +33,10 @@ opensky = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/eurocontrol-asu/skycam/tree/main/packages/skywind"
-Documentation = "https://github.com/eurocontrol-asu/skycam/blob/main/packages/skywind/README.md"
-Repository = "https://github.com/eurocontrol-asu/skycam.git"
-Issues = "https://github.com/eurocontrol-asu/skycam/issues"
+Homepage = "https://github.com/eurocontrol-asu/skyobs/tree/main/packages/skywind"
+Documentation = "https://github.com/eurocontrol-asu/skyobs/blob/main/packages/skywind/README.md"
+Repository = "https://github.com/eurocontrol-asu/skyobs.git"
+Issues = "https://github.com/eurocontrol-asu/skyobs/issues"
 
 [project.scripts]
 skywind = "skywind.cli:main"

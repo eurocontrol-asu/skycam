@@ -4,7 +4,7 @@ A uv workspace for ground-based sky observation, with five independent Python pa
 
 | Package | Purpose | Documentation |
 |---|---|---|
-| [skycam](packages/skycam/) | Calibrated fisheye geometry, image projection and dense sampling maps | [Online documentation](https://eurocontrol-asu.github.io/skycam/) |
+| [skycam](packages/skycam/) | Calibrated fisheye geometry, image projection and dense sampling maps | [Online documentation](https://eurocontrol-asu.github.io/skyobs/) |
 | [skycloud](packages/skycloud/) | Continuous cloud map: value, confidence and an unknown state per sky pixel | [Method, inputs, products and limits](packages/skycloud/README.md) |
 | [skystatic](packages/skystatic/) | Installation and daily static masks from averaged all-sky images | [Method, usage and limitations](packages/skystatic/README.md) |
 | [skysun](packages/skysun/) | Where and how much the sun disturbs each frame: its glow and the reflections of the optics, a value in [0, 1] per pixel | [Method, products, calibration and limits](packages/skysun/README.md) |

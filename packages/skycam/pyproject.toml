@@ -31,10 +31,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/eurocontrol-asu/skycam"
-Documentation = "https://eurocontrol-asu.github.io/skycam/"
-Repository = "https://github.com/eurocontrol-asu/skycam.git"
-Issues = "https://github.com/eurocontrol-asu/skycam/issues"
+Homepage = "https://github.com/eurocontrol-asu/skyobs"
+Documentation = "https://eurocontrol-asu.github.io/skyobs/"
+Repository = "https://github.com/eurocontrol-asu/skyobs.git"
+Issues = "https://github.com/eurocontrol-asu/skyobs/issues"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]

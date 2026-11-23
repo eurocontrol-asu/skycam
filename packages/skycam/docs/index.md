@@ -11,11 +11,11 @@ hide:
 </p>
 
 <p align="center">
-  <a href="https://github.com/eurocontrol-asu/skycam/actions/workflows/ci.yml">
-    <img src="https://github.com/eurocontrol-asu/skycam/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  <a href="https://github.com/eurocontrol-asu/skyobs/actions/workflows/ci.yml">
+    <img src="https://github.com/eurocontrol-asu/skyobs/actions/workflows/ci.yml/badge.svg" alt="CI" />
   </a>
-  <a href="https://coveralls.io/github/eurocontrol-asu/skycam?branch=main">
-    <img src="https://coveralls.io/repos/github/eurocontrol-asu/skycam/badge.svg?branch=main" alt="Coverage" />
+  <a href="https://coveralls.io/github/eurocontrol-asu/skyobs?branch=main">
+    <img src="https://coveralls.io/repos/github/eurocontrol-asu/skyobs/badge.svg?branch=main" alt="Coverage" />
   </a>
   <a href="https://pypi.org/project/skycam/">
     <img src="https://img.shields.io/pypi/v/skycam" alt="PyPI" />

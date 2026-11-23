@@ -7,8 +7,8 @@
 <!-- Canonical Badge Row: Status → Stack → Tooling → Info -->
 <p align="center">
   <!-- Status -->
-  <a href="https://github.com/eurocontrol-asu/skycam/actions/workflows/ci.yml"><img src="https://github.com/eurocontrol-asu/skycam/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://coveralls.io/github/eurocontrol-asu/skycam?branch=main"><img src="https://coveralls.io/repos/github/eurocontrol-asu/skycam/badge.svg?branch=main" alt="Coverage"></a>
+  <a href="https://github.com/eurocontrol-asu/skyobs/actions/workflows/ci.yml"><img src="https://github.com/eurocontrol-asu/skyobs/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://coveralls.io/github/eurocontrol-asu/skyobs?branch=main"><img src="https://coveralls.io/repos/github/eurocontrol-asu/skyobs/badge.svg?branch=main" alt="Coverage"></a>
   <!-- Stack -->
   <img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/pydantic-v2-E92063" alt="Pydantic v2">
@@ -19,7 +19,7 @@
   <!-- Info -->
   <a href="https://pypi.org/project/skycam/"><img src="https://img.shields.io/pypi/v/skycam" alt="PyPI"></a>
   <img src="https://img.shields.io/badge/license-EUPL--1.2-blue" alt="License">
-  <a href="https://eurocontrol-asu.github.io/skycam/"><img src="https://img.shields.io/badge/docs-live-brightgreen" alt="Docs"></a>
+  <a href="https://eurocontrol-asu.github.io/skyobs/"><img src="https://img.shields.io/badge/docs-live-brightgreen" alt="Docs"></a>
 </p>
 
 ---
@@ -111,7 +111,7 @@ Run development commands below from the repository root.
 
 
 ```bash
-git clone https://github.com/eurocontrol-asu/skycam.git
+git clone https://github.com/eurocontrol-asu/skyobs.git
 cd skycam
 make install  # install the skyobs workspace members and tools
 make check    # lint + audit + test
@@ -119,16 +119,16 @@ make check    # lint + audit + test
 
 ## 📚 Documentation
 
-**[eurocontrol-asu.github.io/skycam](https://eurocontrol-asu.github.io/skycam/)**
+**[eurocontrol-asu.github.io/skyobs](https://eurocontrol-asu.github.io/skyobs/)**
 
-- [🚀 Tutorial](https://eurocontrol-asu.github.io/skycam/tutorial/) — Project your first image in 5 minutes
-- [🛠️ Guides](https://eurocontrol-asu.github.io/skycam/guides/) — How-to recipes for common tasks
-- [🧠 Concepts](https://eurocontrol-asu.github.io/skycam/concepts/) — Architecture and algorithm deep-dive
-- [📚 Reference](https://eurocontrol-asu.github.io/skycam/reference/) — Complete API documentation
+- [🚀 Tutorial](https://eurocontrol-asu.github.io/skyobs/tutorial/) — Project your first image in 5 minutes
+- [🛠️ Guides](https://eurocontrol-asu.github.io/skyobs/guides/) — How-to recipes for common tasks
+- [🧠 Concepts](https://eurocontrol-asu.github.io/skyobs/concepts/) — Architecture and algorithm deep-dive
+- [📚 Reference](https://eurocontrol-asu.github.io/skyobs/reference/) — Complete API documentation
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](https://github.com/eurocontrol-asu/skycam/blob/main/CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](https://github.com/eurocontrol-asu/skyobs/blob/main/CONTRIBUTING.md) for guidelines.
 
 ## 📄 License
 

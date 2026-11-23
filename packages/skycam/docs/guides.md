@@ -245,7 +245,7 @@ calibration/
 
 ```bash
 # Clone and install
-git clone https://github.com/eurocontrol-asu/skycam.git
+git clone https://github.com/eurocontrol-asu/skyobs.git
 cd skycam
 make install
 
